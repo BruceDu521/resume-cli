@@ -43,13 +43,13 @@ func (s Service) Parse(ctx context.Context, path string) (domain.Document, error
 }
 func (s Service) candidate(ctx context.Context, d domain.Document) (domain.Candidate, error) {
 	var c domain.Candidate
-	key := "candidate:v1:" + s.Identity + ":" + d.Hash
+	key := "candidate:v5:" + s.Identity + ":" + d.Hash
 	hit, e := s.Cache.Get(key, &c)
 	if e != nil {
 		return c, fmt.Errorf("candidate cache: %w", e)
 	}
 	if hit {
-		if e = c.Validate(d); e == nil {
+		if c, e = c.Ground(d); e == nil {
 			if s.CacheHit != nil {
 				s.CacheHit("candidate")
 			}
@@ -58,7 +58,7 @@ func (s Service) candidate(ctx context.Context, d domain.Document) (domain.Candi
 	}
 	c, e = s.Structurer.Candidate(ctx, d)
 	if e == nil {
-		e = c.Validate(d)
+		c, e = c.Ground(d)
 	}
 	if e == nil {
 		e = s.Cache.Put(key, c)
@@ -67,7 +67,7 @@ func (s Service) candidate(ctx context.Context, d domain.Document) (domain.Candi
 }
 func (s Service) job(ctx context.Context, text string) (domain.Job, error) {
 	var j domain.Job
-	key := "job:v1:" + s.Identity + ":" + domain.Digest(text)
+	key := "job:v5:" + s.Identity + ":" + domain.Digest(text)
 	hit, e := s.Cache.Get(key, &j)
 	if e != nil {
 		return j, fmt.Errorf("job cache: %w", e)
@@ -115,7 +115,7 @@ func (s Service) Score(ctx context.Context, path, jd, lang string) (report.Resul
 		if e != nil {
 			return report.Result{}, e
 		}
-		if e = c.Validate(d); e != nil {
+		if c, e = c.Ground(d); e != nil {
 			return report.Result{}, e
 		}
 		if e = job.Validate(jd); e != nil {
@@ -151,11 +151,17 @@ func (s Service) Score(ctx context.Context, path, jd, lang string) (report.Resul
 		if firstErr != nil {
 			return report.Result{}, firstErr
 		}
+		if len(c.Facts) == 0 {
+			return report.Result{}, errors.New("no assessable resume evidence; refusing to score an empty extraction")
+		}
 
 		judgments, e = s.Matcher.Match(ctx, c, job)
 		if e != nil {
 			return report.Result{}, e
 		}
+	}
+	if len(c.Facts) == 0 {
+		return report.Result{}, errors.New("no assessable resume evidence; refusing to score an empty extraction")
 	}
 	a, e := domain.Aggregate(c, job, judgments)
 	if e != nil {

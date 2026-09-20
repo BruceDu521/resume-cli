@@ -2,7 +2,7 @@
 
 Go PDF 简历分析 CLI：本地提取文本，整理带原文证据的简历和岗位要求，由 Jev 判断匹配情况，再由代码计算分数并生成报告。
 
-**离线实现已完成：三个命令、中文/英文报告、文件输出、mock、JSON 修复、日志、缓存、模型适配器、Makefile 和 Dockerfile。真实模型效果、速度与账号可用性仍待 API Key 实测，尚未选定默认生成模型。**
+**已实现三个命令及全部增强功能，并完成 Gemini / DeepSeek / Jev 真实 API 测试。最终 96 次合成评分均成功；提取仍有技能遗漏，不能将调用成功率视为准确率。详见 [实测报告](docs/evaluation-results-2026-09-20.md)。**
 
 ## 项目简介
 
@@ -55,7 +55,7 @@ docker run --rm --network none -v "$PWD/testdata:/input:ro" resume-cli:local \
 | --- | --- |
 | Go + Cobra | CLI 框架与用例逻辑分离，标准库负责 HTTP / JSON / slog |
 | Poppler | 本地子进程解析，不上传 PDF 文件；是额外运行时依赖 |
-| Gemini 3.8 Flash / DeepSeek V4.1 Flash | 简历与 JD 结构化，质量和实际速度对比后定默认值 |
+| Gemini 3.8 Flash / DeepSeek V4.1 Flash | 简历与 JD 结构化；DeepSeek 实测更快、更便宜，Gemini 字段遗漏较少 |
 | Jev | 一次批量 Choice 判断要求状态及对应证据 |
 | OpenAI / Kimi | 从同一原始文本独立完成 AI 分析，共用代码评分政策 |
 | 模板 / 可选 AI 报告 | 默认本地中英文模板，减少一次模型调用 |
@@ -90,7 +90,9 @@ flowchart LR
 | `RESUME_LOG_LEVEL` | debug / info / warn / error，默认 info |
 | `RESUME_AI_BASE_URL` / `TYPESAFE_BASE_URL` | 可选 HTTPS API 地址，默认官方地址 |
 
-模型预设为 `gemini-3.8-flash`、`deepseek-flash`、`gpt-6-astra`、`kimi-k3`，是集成目标，尚待真实验证。parse / mock 不检查 key。
+模型预设为 `gemini-3.8-flash`、`deepseek-flash`、`gpt-6-astra`、`kimi-k3`。前三条已实测的 API 为 Gemini、DeepSeek 和 Jev；OpenAI/Kimi 适配器仅通过离线契约测试，尚缺 key 验证。parse / mock 不检查 key。
+
+本次评分可优先试 `--provider deepseek`：48 次评分的中位耗时 2.59 秒，平均估算 $0.00062/份（含 Jev）；Gemini 为 3.77 秒、$0.00249/份。但两家都有技能数组遗漏，Gemini 1/48、DeepSeek 3/48，暂不设置全局默认供应商。`.env.example` 的 DeepSeek 是便于试运行的示例选择。
 
 ```sh
 # 已注入对应 key 后
@@ -138,16 +140,19 @@ bin/resume-cli score resume.pdf --jd jd.txt --provider kimi --pipeline baseline
 }
 ```
 
-完整结果还有 comment、interview_questions、逐条 findings 与证据、not_required、policy_version、language、mock。**这些是 mock 结果，不是模型质量实测。**
+真实合成样例：[DeepSeek 中文 extract](examples/extract-zh.deepseek.json)、[DeepSeek + Jev 中文 score](examples/score-zh.deepseek-jev.json)、[Gemini + Jev 英文 score](examples/score-en.gemini-jev.json)。真实评分样例为 65 分，生产运维项按明确否定记 0；mock 中的部分匹配是固定演示，不作为模型真值。
+
+完整结果还有 comment、interview_questions、逐条 findings 与证据、not_required、policy_version、language、mock。**上面的 83 分片段是 mock 结果，不是模型质量实测。**
 
 ## 评分与可靠性
 
 策略 `evidence-v1`：满足 100、部分满足 50、明确不符 0、未体现 0。后两类报告分开表达，confidence 不转换为候选人能力分。技能/经历/教育权重 50%/35%/15%，同维度必需项权重 2、优先项 1。
 
 - 未要求的维度不计总分；为兼容固定结构保留数字 100，并在 not_required 中标明，不能解释成能力满分。
-- 事实与引用须能在来源中找到；语义支持仍需评测。原文存在某句话，并不等于它属于有效履历事实。
+- 事实与引用须能在来源中找到；证据恢复为完整来源行以保留否定和责任边界，遗漏的已提取技能/教育证据可从原文补齐。该步骤不会自动补齐遗漏的公开字段。
+- 空证据集合拒绝评分；Jev 判断与所选证据冲突时，改为未体现、0 分并显示需复核标记，不能静默给分。原文存在某句话，并不等于它属于有效履历事实。
 - JSON 修复：完整代码围栏、BOM、字符串外的尾逗号。拒绝重复键、未知/缺失字段、null、错误类型、超深 JSON、截断和拼接结果，不补造内容。
-- 调用可取消、有超时；仅 429/529/502/503/504 有界重试，最多 3 次。鉴权、结构校验及不完整结果不重试。禁用 HTTP 重定向。
+- 调用可取消、有超时；仅 429/529/502/503/504 有界重试，最多 3 次。鉴权不重试；JSON/schema 或 Candidate/Job 来源校验失败时，任务层最多从原始输入重新生成一次，单独记录成本。禁用 HTTP 重定向。
 - stats 保存已知用量；Gemini 可计费思考 token 计入输出。费用未知不假称零，重试造成费用不完整时 cost_complete=false。
 - 估算价格日期 2026-09-20，不是账单；DeepSeek 使用保守高峰价、Kimi 使用国际美元价，自定义模型/端点需另行核对。
 - 缓存含证据，默认关闭；文件 0600、新目录 0700、24h TTL，只存成功结构化数据，评分和报告每次重算。
@@ -166,7 +171,7 @@ make vet
 make check
 ```
 
-2026-09-20：全部 Go 测试、竞态检查及 vet 通过。总体语句覆盖率 **86.8%**，领域规则 **94.6%**，AI 适配器 **90.1%**。Docker 禁网验证三个命令通过。覆盖率不代表真实模型正确率。
+2026-09-20：全部 Go 测试、竞态检查及 vet 通过。总体语句覆盖率 **87.5%**，领域规则 **96.1%**，AI 适配器 **90.5%**。Docker 禁网验证三个命令通过。覆盖率不代表真实模型正确率。
 
 JSON 修复器另外运行约 10 秒 fuzz，执行 478,049 次输入，无失败。
 
@@ -182,7 +187,7 @@ python3 scripts/evaluate.py --routes gemini deepseek --limit 2 --repeats 1 \
 python3 scripts/evaluate.py --execute --out .local/eval-full
 ```
 
-12 个合成案例；保存每次结果、stats、错误日志、人工检查表和汇总。统计包含失败，质量须按原文人工检查。Gemini / DeepSeek 比较质量与速度，接近时优先便宜的 DeepSeek；OpenAI / Kimi 为独立完整对照。见 [评测协议](docs/evaluation.md)。
+12 个开发案例和 4 个补充回归案例；后者曾用于发现问题并调整提示词，最终已不算独立保留集。保存每次结果、stats、错误日志、检查表和汇总。统计包含失败，质量按原文检查，不能仅依赖脚本。Gemini / DeepSeek 比较质量与速度，接近时优先便宜的 DeepSeek；OpenAI / Kimi 为独立完整对照。见 [评测协议](docs/evaluation.md)。
 
 ## 已实现功能
 
@@ -194,10 +199,11 @@ python3 scripts/evaluate.py --execute --out .local/eval-full
 
 ## 已知问题与未完成内容
 
-- 真实 API 验证与模型质量/速度评测等待 key；版本、授权、限流及输出仍可能需要调整，生成模型无默认值。
+- Gemini/DeepSeek/Jev 已实测，OpenAI/Kimi 缺 key，未实测；生成模型暂时仍需显式选择。
+- 两家生成模型均出现公开 skills 数组为空但 facts 保留技能证据的情况；DeepSeek 另有两次要求分类差异。来源校验能拒绝虚构引用，无法证明提取完整。
 - 合成集较小，尚无独立保留测试集，不能据此声称生产准确率。多栏 PDF 只有基础解析用例。
 - 不做 OCR、加密文件解锁、数据库和批处理服务。
-- 未实现精确任职区间合并与技能年限计算；提示词禁止重叠任期相加或把总工龄等同技能年限，实际效果待评测。
+- 未实现精确任职区间合并与技能年限计算；提示词禁止重叠任期相加或把总工龄等同技能年限，本轮重叠任期样例未发生重复累加，但不代表任意履历均可靠。
 - 未验证 Windows，尚未完成公开仓库与演示视频。
 
 原题、会话、真实输入和评测中间数据位于 Git 忽略目录，公开例子均为合成数据。第三方说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

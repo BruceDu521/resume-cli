@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Reproducible evaluation runner. Dry-run by default; never reads .env files."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -54,11 +55,13 @@ def main():
     p.add_argument("--seed", type=int, default=20260920)
     p.add_argument("--limit", type=int, help="use only the first N cases for a smoke test")
     p.add_argument("--binary", type=Path, default=ROOT / "bin/resume-cli")
+    p.add_argument("--suite", type=Path, default=ROOT / "testdata/evaluation/cases.json", help="case manifest; use a separate suite for held-out validation")
+    p.add_argument("--capture-structures", action="store_true", help="save validated structures in a fresh private cache per trial; never reuse across trials")
     p.add_argument("--out", type=Path, help="new private output directory; required with --execute")
     args = p.parse_args()
     if not 1 <= args.repeats <= 10 or (args.limit is not None and args.limit < 1):
         p.error("repeats must be 1..10; limit must be positive")
-    cases = json.loads((ROOT / "testdata/evaluation/cases.json").read_text(encoding="utf-8"))
+    cases = json.loads(args.suite.read_text(encoding="utf-8"))
     if "mock" in args.routes:
         if args.routes != ["mock"]:
             p.error("mock smoke results must be kept separate from real model results")
@@ -67,7 +70,19 @@ def main():
         cases = cases[:args.limit]
     jobs = [(c, r, n) for c in cases for r in dict.fromkeys(args.routes) for n in range(1, args.repeats + 1)]
     random.Random(args.seed).shuffle(jobs)
-    plan = {"seed": args.seed, "cache": "disabled", "jobs": [{"case": c["id"], "route": r, "repeat": n} for c, r, n in jobs]}
+    sources = sorted([*ROOT.glob("internal/**/*.go"), *ROOT.glob("cmd/**/*.go"), ROOT / "go.mod", ROOT / "go.sum"])
+    digest = hashlib.sha256()
+    for source in sources:
+        digest.update(str(source.relative_to(ROOT)).encode() + b"\0" + source.read_bytes())
+    plan = {
+        "seed": args.seed, "cache": "fresh per trial" if args.capture_structures else "disabled", "code_sha256": digest.hexdigest(),
+        "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "manifest_sha256": hashlib.sha256(args.suite.read_bytes()).hexdigest(),
+        "models": {r: PATHS[r] for r in args.routes}, "jev": "jev-1.13.0",
+        "inputs": {c["id"]: {"pdf_sha256": hashlib.sha256((ROOT / c["pdf"]).read_bytes()).hexdigest(),
+                              "jd_sha256": hashlib.sha256((ROOT / c["jd"]).read_bytes() if "jd" in c else c["jd_text"].encode()).hexdigest()} for c in cases},
+        "jobs": [{"case": c["id"], "route": r, "repeat": n} for c, r, n in jobs],
+    }
     if not args.execute:
         print(json.dumps(plan, indent=2))
         print("Dry run only. No CLI execution or API requests.")
@@ -96,6 +111,8 @@ def main():
                "--timeout", "180s", "--output", str(dest / "result.json"), "--stats", str(dest / "stats.json")]
         provider, pipeline, model = PATHS[route]
         cmd += ["--mock"] if route == "mock" else ["--provider", provider, "--pipeline", pipeline, "--model", model]
+        if args.capture_structures:
+            cmd += ["--cache-dir", str(dest / "structures")]
         start = time.monotonic()
         with (dest / "stderr.log").open("wb") as log:
             try:

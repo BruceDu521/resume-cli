@@ -76,6 +76,7 @@ type Judgment struct {
 	Score         float64 `json:"score"`
 	EvidenceID    string  `json:"evidence_id"`
 	Confidence    float64 `json:"confidence"`
+	ReviewReason  string  `json:"review_reason,omitempty"`
 }
 type Finding struct {
 	Requirement Requirement `json:"requirement"`
@@ -136,6 +137,63 @@ func (c Candidate) Validate(d Document) error {
 		seen[f.ID] = true
 	}
 	return nil
+}
+
+// Ground preserves the source context of selected excerpts and supplies source
+// blocks for extracted profile fields that would otherwise be lost to matching.
+// It copies text already present in the document; it does not infer qualifications.
+func (c Candidate) Ground(d Document) (Candidate, error) {
+	if err := c.Validate(d); err != nil {
+		return c, err
+	}
+	c.Facts = append([]Fact{}, c.Facts...)
+	blocks := map[string]Block{}
+	ids := map[string]bool{}
+	for _, b := range d.Blocks {
+		blocks[b.ID] = b
+	}
+	for i, f := range c.Facts {
+		c.Facts[i].Quote = blocks[f.BlockID].Text
+		ids[f.ID] = true
+	}
+	type field struct{ value, category string }
+	fields := []field{}
+	for _, skill := range c.Resume.Skills {
+		fields = append(fields, field{skill, "skill"})
+	}
+	for _, edu := range c.Resume.Education {
+		for _, value := range []string{edu.School, edu.Major, edu.Degree, edu.GraduationTime} {
+			fields = append(fields, field{value, "education"})
+		}
+	}
+	for _, v := range fields {
+		if v.value == "" {
+			continue
+		}
+		covered := false
+		for _, f := range c.Facts {
+			if Contains(f.Quote, v.value) {
+				covered = true
+				break
+			}
+		}
+		if covered {
+			continue
+		}
+		for _, b := range d.Blocks {
+			if !Contains(b.Text, v.value) {
+				continue
+			}
+			id := "source_" + b.ID
+			for ids[id] {
+				id += "_"
+			}
+			ids[id] = true
+			c.Facts = append(c.Facts, Fact{ID: id, Category: v.category, BlockID: b.ID, Quote: b.Text})
+			break
+		}
+	}
+	return c, c.Validate(d)
 }
 func (j Job) Validate(text string) error {
 	if len(j.Requirements) == 0 || len(j.Requirements) > 24 {

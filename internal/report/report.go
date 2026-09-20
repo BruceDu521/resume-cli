@@ -51,6 +51,13 @@ func Render(a domain.Assessment, lang string, mock bool) Result {
 				question = fmt.Sprintf("你是否有「%s」相关经历？请给出具体例子。", r)
 			}
 		}
+		if f.Judgment.ReviewReason != "" {
+			if lang == "en" {
+				comment += " The model did not link supporting evidence; this item needs review and earns no credit."
+			} else {
+				comment += " 模型判断未能关联支持证据，该项需复核，暂不计分。"
+			}
+		}
 		comments = append(comments, comment)
 		if s != "satisfied" {
 			questions = append(questions, question)

@@ -1,0 +1,84 @@
+{
+  "date": "2026-09-20",
+  "scope": "16 synthetic regression cases per route, 3 repeats; no independent final holdout",
+  "cost_basis": "USD list-price estimate from returned usage, includes Jev; DeepSeek conservative peak price, not account billing",
+  "routes": {
+    "gemini": {
+      "runs": 48,
+      "successes": 48,
+      "wall_ms": {
+        "median": 3765.5,
+        "min": 3215,
+        "max": 10903
+      },
+      "jev_median_ms": 830.0,
+      "estimated_cost_usd": 0.119464968,
+      "estimated_mean_cost_usd": 0.0024888535000000002,
+      "cost_complete": true,
+      "corrective_generations": 0,
+      "state_rubric_pass": 48,
+      "full_rubric_pass": 48,
+      "category_differences": [],
+      "empty_skills_cases": [
+        "heldout-en-missing-gemini-2"
+      ]
+    },
+    "deepseek": {
+      "runs": 48,
+      "successes": 48,
+      "wall_ms": {
+        "median": 2588.5,
+        "min": 2146,
+        "max": 3865
+      },
+      "jev_median_ms": 834.5,
+      "estimated_cost_usd": 0.029841054,
+      "estimated_mean_cost_usd": 0.000621688625,
+      "cost_complete": true,
+      "corrective_generations": 2,
+      "state_rubric_pass": 48,
+      "full_rubric_pass": 46,
+      "category_differences": [
+        {
+          "case": "missing-rust",
+          "route": "deepseek",
+          "repeat": 1,
+          "issues": [
+            "category Rust: experience, expected skill"
+          ],
+          "canonical": [
+            [
+              "Rust",
+              "experience",
+              true,
+              "unknown"
+            ]
+          ],
+          "review_flags": []
+        },
+        {
+          "case": "missing-rust",
+          "route": "deepseek",
+          "repeat": 2,
+          "issues": [
+            "category Rust: experience, expected skill"
+          ],
+          "canonical": [
+            [
+              "Rust",
+              "experience",
+              true,
+              "unknown"
+            ]
+          ],
+          "review_flags": []
+        }
+      ],
+      "empty_skills_cases": [
+        "overlap-deepseek-1",
+        "en-core-deepseek-2",
+        "heldout-en-positive-deepseek-2"
+      ]
+    }
+  }
+}

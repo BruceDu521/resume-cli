@@ -21,3 +21,16 @@ func TestLanguagesAndUnknown(t *testing.T) {
 		t.Fatal("missing satisfied question")
 	}
 }
+
+func TestEvidenceConflictIsVisibleInBothLanguages(t *testing.T) {
+	a := domain.Assessment{Overall: 0, Findings: []domain.Finding{{
+		Requirement: domain.Requirement{Text: "Go"},
+		Judgment:    domain.Judgment{Status: "unknown", Score: 0, ReviewReason: "model_judgment_without_evidence"},
+	}}}
+	for lang, warning := range map[string]string{"zh": "需复核，暂不计分", "en": "needs review and earns no credit"} {
+		r := Render(a, lang, false)
+		if !strings.Contains(r.Comment, warning) || r.Overall != 0 || len(r.Questions) != 1 || r.Mock {
+			t.Fatalf("%s hides evidence conflict: %+v", lang, r)
+		}
+	}
+}

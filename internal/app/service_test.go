@@ -124,3 +124,18 @@ func TestFailureCancelsAndJoinsWorkers(t *testing.T) {
 		t.Fatal("request worker outlived the command")
 	}
 }
+
+type emptyStructure struct{}
+
+func (emptyStructure) Candidate(context.Context, domain.Document) (domain.Candidate, error) {
+	return domain.Candidate{Resume: domain.Resume{Name: "Alice", Education: []domain.Education{}, Skills: []string{}}, Facts: []domain.Fact{}}, nil
+}
+func (emptyStructure) Job(context.Context, string) (domain.Job, error) {
+	return domain.Job{Requirements: []domain.Requirement{{ID: "r", Category: "skill", Text: "Go", Required: true}}}, nil
+}
+func TestEmptyExtractionMustNotBecomeZeroScore(t *testing.T) {
+	s := Service{Parser: parser{d: domain.NewDocument("Alice\nGo development")}, Structurer: emptyStructure{}}
+	if _, err := s.Score(context.Background(), "any", "Go", "zh"); err == nil {
+		t.Fatal("empty extraction scored")
+	}
+}

@@ -1,0 +1,30 @@
+[
+  {
+    "id": "heldout-zh-positive",
+    "pdf": "testdata/holdout-zh.pdf",
+    "lang": "zh",
+    "jd_text": "熟悉 Python 和 MySQL。能独立负责生产服务值班与事故处理。",
+    "review": "Python/MySQL: skill required satisfied. On-call/incident ownership: experience required satisfied; quote explicit duties. No education requirement."
+  },
+  {
+    "id": "heldout-zh-negative",
+    "pdf": "testdata/holdout-zh.pdf",
+    "lang": "zh",
+    "jd_text": "必须有 Go 生产开发经验。本科学历优先。",
+    "review": "Go production experience: explicit negative, unmet with negative evidence. Bachelor: preferred, not hard requirement; diploma is the only documented degree, no invented bachelor. Education judgment may be partial/unknown but not satisfied without evidence."
+  },
+  {
+    "id": "heldout-en-positive",
+    "pdf": "testdata/holdout-en.pdf",
+    "lang": "en",
+    "jd_text": "Must know Rust and Kubernetes. Must have maintained production PostgreSQL backups.",
+    "review": "Rust/Kubernetes skill satisfied. Production backup ownership experience satisfied with concrete quote. Report English; do not invent dates or durations."
+  },
+  {
+    "id": "heldout-en-missing",
+    "pdf": "testdata/holdout-en.pdf",
+    "lang": "en",
+    "jd_text": "Must know Kafka. Python familiarity is preferred. Bachelor degree required.",
+    "review": "Kafka skill required unknown. Python skill preferred satisfied with personal-project evidence, not fabricated professional tenure. Bachelor education required satisfied."
+  }
+]

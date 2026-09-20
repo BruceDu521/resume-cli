@@ -45,3 +45,31 @@ func TestChoiceValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestRoundedDistribution(t *testing.T) {
+	// Observed API response: independently rounded probabilities sum to 1.01.
+	opts := map[string]any{"a": nil, "b": nil, "c": nil, "d": nil}
+	a := answer{Type: "choice", Choice: "a", Confidence: .41, Probabilities: map[string]float64{"a": .5700000000000001, "b": .41, "c": .02, "d": .01}}
+	if err := validateChoice(a, opts); err != nil {
+		t.Fatal(err)
+	}
+	a.Probabilities["a"] = .8
+	if validateChoice(a, opts) == nil {
+		t.Fatal("accepted materially inconsistent probabilities")
+	}
+}
+
+func TestNoEvidenceCannotEarnCredit(t *testing.T) {
+	c := domain.Candidate{Facts: []domain.Fact{{ID: "f", Category: "experience", Quote: "Developer 2018-2022"}}}
+	job := domain.Job{Requirements: []domain.Requirement{{ID: "r", Category: "experience", Text: "Seven years", Required: true}}}
+	j := Jev{Key: "synthetic", Model: "jev-1.13.0", BaseURL: "https://example.invalid", HTTP: &Transport{Client: doFunc(func(*http.Request) (*http.Response, error) {
+		return response(200, `{"answers":{"0s":{"type":"choice","choice":"partial","confidence":0.4,"probabilities":{"satisfied":0,"partial":0.6,"unmet":0,"unknown":0.4}},"0e":{"type":"choice","choice":"none","confidence":0.7,"probabilities":{"f0":0.2,"none":0.8}}}}`), nil
+	})}}
+	out, err := j.Match(context.Background(), c, job)
+	if err != nil || len(out) != 1 || out[0].Status != "unknown" || out[0].Score != 0 || out[0].ReviewReason == "" {
+		t.Fatal(out, err)
+	}
+	if _, err = domain.Aggregate(c, job, out); err != nil {
+		t.Fatal(err)
+	}
+}

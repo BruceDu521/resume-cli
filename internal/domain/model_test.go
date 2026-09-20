@@ -94,3 +94,31 @@ func TestJobValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestGroundPreservesContextAndMissingProfileEvidence(t *testing.T) {
+	d := NewDocument("Alice\nNo Rust production experience.\nGo / PostgreSQL backend development\nSample University | Bachelor | 2020")
+	c := Candidate{Resume: Resume{Name: "Alice", Skills: []string{"Go", "PostgreSQL"}, Education: []Education{{School: "Sample University", Degree: "Bachelor", GraduationTime: "2020"}}}, Facts: []Fact{{ID: "f1", Category: "skill", BlockID: "b2", Quote: "Rust"}}}
+	got, err := c.Ground(d)
+	if err != nil || len(got.Facts) != 3 {
+		t.Fatal(got, err)
+	}
+	if got.Facts[0].Quote != "No Rust production experience." || got.Facts[0].ID != "f1" {
+		t.Fatal("negation lost", got)
+	}
+	if c.Facts[0].Quote != "Rust" {
+		t.Fatal("mutated caller's evidence")
+	}
+	again, err := got.Ground(d)
+	if err != nil || len(again.Facts) != 3 {
+		t.Fatal("grounding not idempotent", again, err)
+	}
+	c.Facts = []Fact{}
+	got, err = c.Ground(d)
+	if err != nil || len(got.Facts) != 2 {
+		t.Fatal("profile evidence omitted", got, err)
+	}
+	c.Resume.Skills = []string{"invented skill"}
+	if _, err = c.Ground(d); err == nil {
+		t.Fatal("fabricated skill accepted")
+	}
+}

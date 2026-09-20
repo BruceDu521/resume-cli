@@ -89,7 +89,7 @@ JSON 修复仅去完整代码围栏/BOM、移除字符串外尾逗号。拒绝�
 
 测试使用内存 HTTP 替身，ai/cli 测试额外禁用默认 transport，未实际联网；PDF 测试只运行合成本地输入。覆盖正常流程、无效引用、未知信息、维度权重、JSON 修复、HTTP 重试、取消与 worker 收敛、文件防覆盖和缓存。Docker 禁网跑通三个命令。
 
-已接通 Gemini/DeepSeek/Jev 的真实 API，并针对实际返回添加分类规则、概率舍入和证据冲突回归；OpenAI/Kimi 尚无 key，未实测。评测入口见 scripts/evaluate.py，默认只列计划。
+已接通 Gemini/DeepSeek/Jev 和 Kimi Code K3 的真实 API，并针对实际返回添加分类规则、概率舍入和证据冲突回归；OpenAI 暂缓，Kimi 开放平台未实测。评测入口见 scripts/evaluate.py，默认只列计划。
 
 ## 官方参考
 
@@ -101,3 +101,7 @@ JSON 修复仅去完整代码围栏/BOM、移除字符串外尾逗号。拒绝�
 - https://developers.openai.com/api/docs/models/gpt-6-astra
 - https://platform.kimi.ai/
 - https://poppler.freedesktop.org/
+
+## 凭据接口
+
+四家生成适配器统一从 `RESUME_AI_API_KEY` 接收密钥，provider/model/base URL 决定请求目标。不读取旧供应商专属变量，也不自动切换密钥或目标。hybrid 同时调用 Jev，使用独立 `TYPESAFE_API_KEY`。CLI 不加载 dotenv，不接受命令行 key；离线测试全部使用合成凭据。

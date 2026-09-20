@@ -48,4 +48,8 @@ Go 1.25.5，macOS Poppler 26.04.0；Docker 使用本地 OrbStack，Debian 镜像
 
 最新配置：--pipeline single/hybrid，RESUME_AI_PIPELINE；baseline 为兼容别名。provider/model/base-url/jev-model 参数覆盖对应环境变量，key 只从环境变量读。single 只需所选供应商 key，报告与判断一并生成，代码验证来源及算分。K3 使用 low 和 strict schema；Code 订阅不输出美元费用。
 
+后续统一生成凭据为 `RESUME_AI_API_KEY`，不再读取旧供应商变量；Jev 保留 `TYPESAFE_API_KEY`。评测脚本通过显式 `--env-dir` 从私有 provider profiles 注入各自的统一 key，不允许把同一环境 key 自动发往多个供应商。项目 `.env` 已迁移，原有供应商 key 保存于忽略目录，不打印、不提交。
+
+真实简历追加验证见 `evaluation-real-resume-2026-09-20.md`；原始文件位于 `.local/real-resume/`。五条评分路线各一次，3 成功、2 校验失败；Kimi 成功结果的评论仍有 unknown 被改写成能力缺失的问题。三家独立提取均保留 14 项核心技能和个人/教育字段。Gemini 单模型独立诊断确认跨行 quote 与单个 block_id 不匹配；DeepSeek 初次失败没有原始响应，不能声称同因或已经修复。不要放宽来源校验掩盖问题；后续优先设计可验证的段落/跨行证据与生成报告一致性检查。当前无活动评测，无需重复调用；未改提示词或评分规则。
+
 最新单模型比较已完成：DS/Gemini 四路径共128次，Kimi Code K3 16次。见 evaluation-single-vs-hybrid-2026-09-20.md/json。K3 15成功并符合规则，1次60秒请求超时；DS single有一次校验失败及若干语义偏差。保留默认hybrid、显式provider；single是易用的单key可选模式。没有运行中的真实评测，不需重复调用。

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reproducible evaluation runner. Dry-run by default; never reads .env files."""
+"""Reproducible evaluation runner. Dry-run by default; profiles require --env-dir."""
 import argparse
 import hashlib
 import json
@@ -9,6 +9,7 @@ import random
 import statistics
 import subprocess
 import time
+from evaluation_credentials import load_credentials
 
 ROOT = Path(__file__).resolve().parents[1]
 PATHS = {
@@ -63,6 +64,7 @@ def main():
     p.add_argument("--suite", type=Path, default=ROOT / "testdata/evaluation/cases.json", help="case manifest; use a separate suite for held-out validation")
     p.add_argument("--kimi-base-url", choices=["https://api.moonshot.ai/v1", "https://api.moonshot.cn/v1"], default="https://api.moonshot.ai/v1", help="explicit official Kimi account region")
     p.add_argument("--capture-structures", action="store_true", help="save validated structures in a fresh private cache per trial; never reuse across trials")
+    p.add_argument("--env-dir", type=Path, help="explicit private directory containing <provider>.env, each with RESUME_AI_API_KEY; never auto-loads project .env")
     p.add_argument("--out", type=Path, help="new private output directory; required with --execute")
     args = p.parse_args()
     if not 1 <= args.repeats <= 10 or (args.limit is not None and args.limit < 1):
@@ -100,12 +102,16 @@ def main():
     binary = args.binary.resolve()
     if not binary.is_file():
         p.error("build bin/resume-cli first")
+    try:
+        credentials = load_credentials([PATHS[r][0] for r in args.routes], args.env_dir)
+    except ValueError as exc:
+        p.error(str(exc))
     os.umask(0o077)
     args.out.mkdir(parents=True, exist_ok=False)
     write_json(args.out / "plan.json", plan)
     env = os.environ.copy()
     # Pin the benchmark routes. Do not silently inherit custom proxy/model settings.
-    for key in ("RESUME_AI_PIPELINE", "RESUME_AI_PROVIDER", "RESUME_AI_MODEL", "RESUME_AI_BASE_URL", "TYPESAFE_BASE_URL", "RESUME_JEV_MODEL"):
+    for key in ("RESUME_AI_API_KEY", "RESUME_AI_PIPELINE", "RESUME_AI_PROVIDER", "RESUME_AI_MODEL", "RESUME_AI_BASE_URL", "TYPESAFE_BASE_URL", "RESUME_JEV_MODEL"):
         env.pop(key, None)
     env["RESUME_JEV_MODEL"] = "jev-1.13.0"
     rows = []
@@ -118,6 +124,11 @@ def main():
         cmd = [str(binary), "score", str(ROOT / case["pdf"]), "--jd", str(jd), "--lang", case["lang"],
                "--timeout", "180s", "--output", str(dest / "result.json"), "--stats", str(dest / "stats.json")]
         provider, pipeline, model = PATHS[route]
+        trial_env = env.copy()
+        if provider:
+            trial_env["RESUME_AI_API_KEY"] = credentials[provider]
+        if pipeline == "single" or route == "mock":
+            trial_env.pop("TYPESAFE_API_KEY", None)
         cmd += ["--mock"] if route == "mock" else ["--provider", provider, "--pipeline", pipeline, "--model", model]
         if provider == "kimi":
             cmd += ["--base-url", "https://api.kimi.com/coding/v1" if route == "kimi_code" else args.kimi_base_url]
@@ -126,7 +137,7 @@ def main():
         start = time.monotonic()
         with (dest / "stderr.log").open("wb") as log:
             try:
-                result = subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=log, env=env, timeout=195)
+                result = subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=log, env=trial_env, timeout=195)
                 code = result.returncode
             except subprocess.TimeoutExpired:
                 code = -1

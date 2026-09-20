@@ -56,11 +56,11 @@ testdata/evaluation/cases.json 已有 12 个合成案例，覆盖中文、英文
 
 ## 当前缺项
 
-Gemini/DeepSeek/Jev 的真实评分、extract、AI 报告及冷/热缓存已验证。OpenAI/Kimi 缺本任务 key，未实测。尚缺独立保留集、真实复杂简历和高并发压测；不读取其他项目凭据。
+Gemini/DeepSeek/Jev 的真实评分、extract、AI 报告及冷/热缓存已验证。Kimi Code K3 已实测，OpenAI 按用户要求暂缓。尚缺独立保留集和高并发压测；不读取其他项目凭据。
 
 ## 执行入口与产物
 
-`scripts/evaluate.py` 默认 dry-run；`--execute --out <新目录>` 才运行。默认四路径、每案例三次、seed=20260920 打乱顺序、不启用应用缓存；共 144 次 CLI 运行。首次应使用 `--limit 2 --repeats 1 --routes gemini deepseek` 冒烟确认可用。模型 ID 显式固定，覆盖可能污染比较的模型/端点环境变量。脚本仅继承所需环境，不读取 .env。
+`scripts/evaluate.py` 默认 dry-run；`--execute --out <新目录>` 才运行。默认四路径、每案例三次、seed=20260920 打乱顺序、不启用应用缓存；共 144 次 CLI 运行。首次应使用 `--limit 2 --repeats 1 --routes gemini deepseek` 冒烟确认可用。模型 ID 显式固定，覆盖可能污染比较的模型/端点环境变量。脚本不自动读取项目 `.env`。单供应商评测继承 `RESUME_AI_API_KEY`；跨供应商评测必须显式传入 `--env-dir`，避免将同一 key 发到不同供应商。
 
 每次保存 result.json、stats.json、stderr.log、review.json；runs.jsonl 逐条追加以保留中断前进度，summary.json 包含完成率、含失败的 wall time 中位数/范围、已观察费用及完整性标记。无自动胜者。另有固定来源语义检查脚本辅助核对要求/状态/类别，并逐项复核差异；成功率不等于正确率。review.json 按案例原文填写事实错误、遗漏、无证据判断与报告质量。
 
@@ -79,3 +79,14 @@ Gemini/DeepSeek/Jev 的真实评分、extract、AI 报告及冷/热缓存已验�
 Kimi Code 与开放平台是不同产品和端点，key 不互通，不能把 kimi-for-coding 的动态别名冒充指定 K3；Code 请求显式 k3、low reasoning，保存响应模型 ID。Code 订阅用量不估算为按 token 付费美元账单。
 
 本轮同一时段对 16 例做两次重复、随机交错四条 DS/Gemini 路径，模型质量偏差不在运行中调 prompt。Kimi Code 在确认产品后另批验证，时间窗口不同。所有这些案例已用于开发，属于工程回归比较，不能报告为独立准确率。
+
+## 评测凭据配置
+
+CLI 对所有生成供应商统一使用 `RESUME_AI_API_KEY`；hybrid 另需 `TYPESAFE_API_KEY`。多供应商对照可创建 Git 忽略的私有目录，例如 `.local/provider-env/`，以 0600 权限保存 `deepseek.env`、`gemini.env`、`kimi.env`。每个文件只能包含一行 `RESUME_AI_API_KEY=对应密钥`（允许空行和注释），不执行 shell 内容。Kimi 文件须与明确选择的 Code / 开放平台路线匹配。
+
+```sh
+python3 scripts/evaluate.py --routes deepseek deepseek_single gemini gemini_single \
+  --env-dir .local/provider-env --repeats 1 --execute --out .local/eval-new
+```
+
+Jev key 通过环境注入；runner 每次只把当前供应商的生成 key 传入 CLI。single 不继承 Jev key。dry-run 不读取这些凭据文件，也不进行模型调用。不要将密钥填入测试清单、命令行或公开报告。

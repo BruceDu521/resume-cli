@@ -241,25 +241,25 @@ func envDefault(getenv func(string) string, key, fallback string) string {
 	return fallback
 }
 func remote(o options, getenv func(string) string) (*ai.Remote, error) {
-	var model, key, base string
+	var model, base string
 	switch o.provider {
 	case "gemini":
-		model, key, base = "gemini-3.8-flash", "GEMINI_API_KEY", "https://generativelanguage.googleapis.com/v1beta"
+		model, base = "gemini-3.8-flash", "https://generativelanguage.googleapis.com/v1beta"
 	case "deepseek":
-		model, key, base = "deepseek-flash", "DEEPSEEK_API_KEY", "https://api.deepseek.com"
+		model, base = "deepseek-flash", "https://api.deepseek.com"
 	case "openai":
-		model, key, base = "gpt-6-astra", "OPENAI_API_KEY", "https://api.openai.com/v1"
+		model, base = "gpt-6-astra", "https://api.openai.com/v1"
 	case "kimi":
-		model, key, base = "kimi-k3", "KIMI_API_KEY", "https://api.moonshot.ai/v1"
+		model, base = "kimi-k3", "https://api.moonshot.ai/v1"
 	default:
 		return nil, errors.New("choose --provider gemini, deepseek, kimi or openai (or set RESUME_AI_PROVIDER)")
 	}
 	if o.model != "" {
 		model = o.model
 	}
-	secret := getenv(key)
+	secret := getenv("RESUME_AI_API_KEY")
 	if secret == "" {
-		return nil, errors.New("missing " + key)
+		return nil, errors.New("missing RESUME_AI_API_KEY")
 	}
 	base = envDefault(getenv, "RESUME_AI_BASE_URL", base)
 	if o.baseURL != "" {

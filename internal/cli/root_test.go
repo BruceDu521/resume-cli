@@ -114,7 +114,7 @@ func TestHelpAndPrivateInputs(t *testing.T) {
 func TestRemoteConfig(t *testing.T) {
 	for _, p := range []string{"gemini", "deepseek", "openai", "kimi"} {
 		r, e := remote(options{provider: p}, func(k string) string {
-			if strings.HasSuffix(k, "API_KEY") {
+			if k == "RESUME_AI_API_KEY" {
 				return "synthetic"
 			}
 			return ""
@@ -163,7 +163,7 @@ func TestSingleModelNeedsOnlySelectedKey(t *testing.T) {
 				if k == "RESUME_AI_PIPELINE" {
 					return mode
 				}
-				if k == strings.ToUpper(provider)+"_API_KEY" {
+				if k == "RESUME_AI_API_KEY" {
 					return "synthetic"
 				}
 				if k == "TYPESAFE_BASE_URL" {
@@ -192,6 +192,20 @@ func TestFlagOverridesEnvironment(t *testing.T) {
 		got, err := cmd.PersistentFlags().GetString(name)
 		if err != nil || got != want {
 			t.Fatal(name, got, err)
+		}
+	}
+}
+
+func TestLegacyKeysDoNotSelectCredential(t *testing.T) {
+	for _, provider := range []string{"deepseek", "gemini", "kimi", "openai"} {
+		_, err := remote(options{provider: provider}, func(k string) string {
+			if k == strings.ToUpper(provider)+"_API_KEY" {
+				return "legacy-secret"
+			}
+			return ""
+		})
+		if err == nil || err.Error() != "missing RESUME_AI_API_KEY" {
+			t.Fatalf("%s: %v", provider, err)
 		}
 	}
 }

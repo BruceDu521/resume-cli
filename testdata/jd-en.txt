@@ -1,0 +1,4 @@
+RESUME_CLI_JD_V1
+Go / PostgreSQL development
+Kubernetes production operations
+Bachelor

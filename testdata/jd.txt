@@ -1,0 +1,4 @@
+RESUME_CLI_JD_V1
+熟悉 Go / PostgreSQL
+能够独立承担 Kubernetes 生产运维
+本科

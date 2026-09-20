@@ -1,0 +1,79 @@
+{
+  "overall_score": 83,
+  "skill_score": 100,
+  "experience_score": 50,
+  "education_score": 100,
+  "not_required": [],
+  "findings": [
+    {
+      "requirement": {
+        "id": "dev",
+        "category": "skill",
+        "text": "熟悉 Go / PostgreSQL",
+        "required": true
+      },
+      "judgment": {
+        "requirement_id": "dev",
+        "status": "satisfied",
+        "score": 100,
+        "evidence_id": "dev",
+        "confidence": 1
+      },
+      "evidence": {
+        "id": "dev",
+        "category": "skill",
+        "block_id": "b5",
+        "quote": "Go / PostgreSQL 后端开发，2022-2025"
+      }
+    },
+    {
+      "requirement": {
+        "id": "ops",
+        "category": "experience",
+        "text": "能够独立承担 Kubernetes 生产运维",
+        "required": true
+      },
+      "judgment": {
+        "requirement_id": "ops",
+        "status": "partial",
+        "score": 50,
+        "evidence_id": "ops",
+        "confidence": 1
+      },
+      "evidence": {
+        "id": "ops",
+        "category": "experience",
+        "block_id": "b6",
+        "quote": "Kubernetes 部署；尚未承担生产故障处理。"
+      }
+    },
+    {
+      "requirement": {
+        "id": "edu",
+        "category": "education",
+        "text": "本科",
+        "required": true
+      },
+      "judgment": {
+        "requirement_id": "edu",
+        "status": "satisfied",
+        "score": 100,
+        "evidence_id": "edu",
+        "confidence": 1
+      },
+      "evidence": {
+        "id": "edu",
+        "category": "education",
+        "block_id": "b4",
+        "quote": "示例大学 | 软件工程 | 本科 | 2022"
+      }
+    }
+  ],
+  "policy_version": "evidence-v1",
+  "comment": "已有证据支持「熟悉 Go / PostgreSQL」。 「能够独立承担 Kubernetes 生产运维」有部分相关证据，责任范围和实践深度需要确认。 已有证据支持「本科」。",
+  "interview_questions": [
+    "围绕「能够独立承担 Kubernetes 生产运维」，哪些部分由你实际负责？当时是什么环境？"
+  ],
+  "language": "zh",
+  "mock": true
+}

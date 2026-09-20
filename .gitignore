@@ -1,0 +1,24 @@
+# The original assessment is confidential and must remain local.
+.local/
+
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+
+# Real candidate documents and generated results
+private-inputs/
+private-outputs/
+
+# Build artifacts
+/bin/
+/dist/
+/target/
+/coverage.out
+/.cache/
+*.log
+.DS_Store
+
+# Python development scripts
+__pycache__/
+*.pyc

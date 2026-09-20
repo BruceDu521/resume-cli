@@ -1,0 +1,103 @@
+package ai
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"testing"
+	"time"
+
+	"resume-cli/internal/domain"
+)
+
+func TestProviderContracts(t *testing.T) {
+	for _, provider := range []string{"gemini", "deepseek", "openai", "kimi"} {
+		t.Run(provider, func(t *testing.T) {
+			r := Remote{Provider: provider, Model: "model", Key: "synthetic", BaseURL: "https://example.invalid/v1", HTTP: &Transport{Client: doFunc(func(req *http.Request) (*http.Response, error) {
+				var body map[string]any
+				if e := json.NewDecoder(req.Body).Decode(&body); e != nil {
+					t.Fatal(e)
+				}
+				if body["model"] != "model" {
+					t.Fatal(body)
+				}
+				if provider == "gemini" {
+					if req.URL.Path != "/v1/interactions" || req.Header.Get("x-goog-api-key") != "synthetic" || body["store"] != false || body["system_instruction"] == nil {
+						t.Fatal(body)
+					}
+					return response(200, `{"status":"completed","model":"gemini-3.8-flash","steps":[{"type":"model_output","content":[{"type":"text","text":"{}"}]}],"usage":{"total_input_tokens":100,"total_output_tokens":20,"total_thought_tokens":10,"total_cached_tokens":5}}`), nil
+				}
+				if req.URL.Path != "/v1/chat/completions" || req.Header.Get("Authorization") != "Bearer synthetic" {
+					t.Fatal(req.URL)
+				}
+				if provider == "deepseek" && body["thinking"].(map[string]any)["type"] != "disabled" {
+					t.Fatal(body)
+				}
+				if provider == "openai" && body["reasoning_effort"] != "low" {
+					t.Fatal(body)
+				}
+				return response(200, `{"model":"model","choices":[{"finish_reason":"stop","message":{"content":"{}"}}],"usage":{"prompt_tokens":100,"completion_tokens":20,"prompt_tokens_details":{"cached_tokens":5}}}`), nil
+			})}}
+			b, u, e := r.Generate(context.Background(), Request{Stage: "candidate", Instruction: "rules", State: map[string]string{"x": "y"}, Schema: object(map[string]any{})})
+			if e != nil || string(b) != "{}" || !u.Known || u.Input != 100 || u.Cached != 5 {
+				t.Fatal(string(b), u, e)
+			}
+			if provider == "gemini" && u.Output != 30 {
+				t.Fatal("thinking tokens not billed", u)
+			}
+		})
+	}
+}
+func TestProviderFailures(t *testing.T) {
+	for _, raw := range []string{`{"choices":[]}`, `{"choices":[{"finish_reason":"length","message":{"content":"{}"}}]}`, `{"choices":[{"finish_reason":"stop","message":{"content":"{}","refusal":"no"}}]}`} {
+		r := Remote{Provider: "openai", Model: "x", Key: "synthetic", BaseURL: "https://example.invalid", HTTP: &Transport{Client: doFunc(func(*http.Request) (*http.Response, error) { return response(200, raw), nil })}}
+		if _, _, e := r.Generate(context.Background(), Request{}); e == nil {
+			t.Fatal(raw)
+		}
+	}
+	r := Remote{Provider: "openai"}
+	if _, _, e := r.Generate(context.Background(), Request{}); e == nil {
+		t.Fatal("missing key")
+	}
+}
+func TestEstimate(t *testing.T) {
+	u := Usage{Model: "gemini-3.8-flash", Input: 1000000, Output: 1000000, Known: true}
+	estimate(&u, time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC))
+	if u.CostUSD == nil || *u.CostUSD != 4.5 {
+		t.Fatal(u)
+	}
+	u.CostUSD = nil
+	estimate(&u, time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC))
+	if u.CostUSD != nil {
+		t.Fatal("stale promotional price")
+	}
+}
+
+type fakeGenerator struct {
+	value any
+	err   error
+}
+
+func (f fakeGenerator) Generate(_ context.Context, _ Request) ([]byte, Usage, error) {
+	b, _ := json.Marshal(f.value)
+	return b, Usage{}, f.err
+}
+func (fakeGenerator) Identity() string { return "fake" }
+func TestStructureValidation(t *testing.T) {
+	d := domain.NewDocument("Lin Yuan\nGo development")
+	c := domain.Candidate{Resume: domain.Resume{Name: "Lin Yuan", Education: []domain.Education{}, Skills: []string{"Go"}}, Facts: []domain.Fact{{ID: "f1", Category: "skill", BlockID: "b2", Quote: "Go development"}}}
+	observed := false
+	s := Structurer{Generator: fakeGenerator{value: c}, Observe: func(Usage) { observed = true }}
+	if _, e := s.Candidate(context.Background(), d); e != nil || !observed {
+		t.Fatal(e)
+	}
+	c.Facts[0].Quote = "made up"
+	s.Generator = fakeGenerator{value: c}
+	if _, e := s.Candidate(context.Background(), d); e == nil {
+		t.Fatal("hallucinated evidence")
+	}
+	s.Generator = fakeGenerator{value: domain.Job{Requirements: []domain.Requirement{{ID: "r1", Category: "skill", Text: "Go", Required: true}}}}
+	if _, e := s.Job(context.Background(), "Go"); e != nil {
+		t.Fatal(e)
+	}
+}

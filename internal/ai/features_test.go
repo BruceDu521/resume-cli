@@ -24,6 +24,15 @@ func TestBaselineContract(t *testing.T) {
 	if e != nil || result.Overall != 50 {
 		t.Fatal(result, e)
 	}
+	good, _ := json.Marshal(v)
+	bad := strings.Replace(string(good), `"quote":"Go"`, `"quote":"Rust"`, 1)
+	g := &sequenceGenerator{bodies: []string{bad, string(good)}}
+	stages := []string{}
+	s = Structurer{Generator: g, Observe: func(u Usage) { stages = append(stages, u.Stage) }}
+	_, _, _, _, _, e = s.Evaluate(context.Background(), d, "Go", "en")
+	if e != nil || g.calls != 2 || stages[1] != "baseline_validation_retry" {
+		t.Fatal("single-model source validation must use the bounded correction", stages, e)
+	}
 }
 func TestNarrator(t *testing.T) {
 	for _, good := range []bool{true, false} {

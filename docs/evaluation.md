@@ -71,3 +71,11 @@ Gemini/DeepSeek/Jev 的真实评分、extract、AI 报告及冷/热缓存已验�
 评测入口支持 --suite 指定单独保留集。plan.json 保存 Go 源码、runner、案例清单及每份 PDF/JD 的 SHA-256；不同修复轮次独立目录，历史失败不删除、不混入最终耗时。
 
 `--capture-structures` 为每次试验建立独立私有缓存，保存通过校验的 Candidate/Job 供检查，但不跨试验复用，因此不改变冷运行条件。`python3 scripts/review-evaluation.py <结果目录>` 按当前合成案例固定规则检查；不代替对事实、证据和报告的阅读，也不能证明提取完整。
+
+## 单模型对照扩展
+
+用户追加要求比较 DeepSeek/Gemini 的单模型与 Jev 组合，并使用 Kimi K3；OpenAI 暂缓。runner 支持 deepseek_single、gemini_single、kimi（开放平台 kimi-k3）、kimi_code（Code 订阅 k3）。single 是独立端到端 AI 分析，仍共用来源校验和代码评分，不读取其他模型结果；生成报告文字计入成本。hybrid 默认模板报告，两者均完成公开报告，但生成 token 工作量不同，应披露。
+
+Kimi Code 与开放平台是不同产品和端点，key 不互通，不能把 kimi-for-coding 的动态别名冒充指定 K3；Code 请求显式 k3、low reasoning，保存响应模型 ID。Code 订阅用量不估算为按 token 付费美元账单。
+
+本轮同一时段对 16 例做两次重复、随机交错四条 DS/Gemini 路径，模型质量偏差不在运行中调 prompt。Kimi Code 在确认产品后另批验证，时间窗口不同。所有这些案例已用于开发，属于工程回归比较，不能报告为独立准确率。

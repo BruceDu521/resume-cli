@@ -14,8 +14,12 @@ ROOT = Path(__file__).resolve().parents[1]
 PATHS = {
     "gemini": ("gemini", "hybrid", "gemini-3.8-flash"),
     "deepseek": ("deepseek", "hybrid", "deepseek-flash"),
-    "openai": ("openai", "baseline", "gpt-6-astra"),
-    "kimi": ("kimi", "baseline", "kimi-k3"),
+    "gemini_single": ("gemini", "single", "gemini-3.8-flash"),
+    "deepseek_single": ("deepseek", "single", "deepseek-flash"),
+    "kimi_hybrid": ("kimi", "hybrid", "kimi-k3"),
+    "kimi_code": ("kimi", "single", "k3"),
+    "openai": ("openai", "single", "gpt-6-astra"),
+    "kimi": ("kimi", "single", "kimi-k3"),
     "mock": ("", "hybrid", ""),
 }
 
@@ -35,10 +39,11 @@ def summarize(rows):
         complete = all(r["success"] for r in group) and all(c.get("cost_complete", False) for c in calls)
         if route != "mock" and not calls:
             complete = False
+        known_costs = [c["estimated_cost_usd"] for c in calls if c.get("estimated_cost_usd") is not None]
         summary[route] = {
             "runs": len(group), "successes": sum(r["success"] for r in group),
             "wall_ms_including_failures": {"median": statistics.median(times), "min": min(times), "max": max(times)},
-            "observed_cost_usd": sum(c.get("estimated_cost_usd", 0) for c in calls),
+            "observed_cost_usd": sum(known_costs) if known_costs or route == "mock" else None,
             "cost_complete": complete,
             "request_attempts": sum(c.get("attempts", 0) for c in calls),
             "json_repairs": sum(c.get("json_repaired", False) for c in calls),
@@ -56,6 +61,7 @@ def main():
     p.add_argument("--limit", type=int, help="use only the first N cases for a smoke test")
     p.add_argument("--binary", type=Path, default=ROOT / "bin/resume-cli")
     p.add_argument("--suite", type=Path, default=ROOT / "testdata/evaluation/cases.json", help="case manifest; use a separate suite for held-out validation")
+    p.add_argument("--kimi-base-url", choices=["https://api.moonshot.ai/v1", "https://api.moonshot.cn/v1"], default="https://api.moonshot.ai/v1", help="explicit official Kimi account region")
     p.add_argument("--capture-structures", action="store_true", help="save validated structures in a fresh private cache per trial; never reuse across trials")
     p.add_argument("--out", type=Path, help="new private output directory; required with --execute")
     args = p.parse_args()
@@ -77,8 +83,10 @@ def main():
     plan = {
         "seed": args.seed, "cache": "fresh per trial" if args.capture_structures else "disabled", "code_sha256": digest.hexdigest(),
         "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "binary_sha256": hashlib.sha256(args.binary.read_bytes()).hexdigest() if args.binary.is_file() else None,
         "manifest_sha256": hashlib.sha256(args.suite.read_bytes()).hexdigest(),
         "models": {r: PATHS[r] for r in args.routes}, "jev": "jev-1.13.0",
+        "kimi_base_url": args.kimi_base_url, "kimi_code_base_url": "https://api.kimi.com/coding/v1", "kimi_reasoning_effort": "low",
         "inputs": {c["id"]: {"pdf_sha256": hashlib.sha256((ROOT / c["pdf"]).read_bytes()).hexdigest(),
                               "jd_sha256": hashlib.sha256((ROOT / c["jd"]).read_bytes() if "jd" in c else c["jd_text"].encode()).hexdigest()} for c in cases},
         "jobs": [{"case": c["id"], "route": r, "repeat": n} for c, r, n in jobs],
@@ -97,7 +105,7 @@ def main():
     write_json(args.out / "plan.json", plan)
     env = os.environ.copy()
     # Pin the benchmark routes. Do not silently inherit custom proxy/model settings.
-    for key in ("RESUME_AI_PROVIDER", "RESUME_AI_MODEL", "RESUME_AI_BASE_URL", "TYPESAFE_BASE_URL", "RESUME_JEV_MODEL"):
+    for key in ("RESUME_AI_PIPELINE", "RESUME_AI_PROVIDER", "RESUME_AI_MODEL", "RESUME_AI_BASE_URL", "TYPESAFE_BASE_URL", "RESUME_JEV_MODEL"):
         env.pop(key, None)
     env["RESUME_JEV_MODEL"] = "jev-1.13.0"
     rows = []
@@ -111,7 +119,9 @@ def main():
                "--timeout", "180s", "--output", str(dest / "result.json"), "--stats", str(dest / "stats.json")]
         provider, pipeline, model = PATHS[route]
         cmd += ["--mock"] if route == "mock" else ["--provider", provider, "--pipeline", pipeline, "--model", model]
-        if args.capture_structures:
+        if provider == "kimi":
+            cmd += ["--base-url", "https://api.kimi.com/coding/v1" if route == "kimi_code" else args.kimi_base_url]
+        if args.capture_structures and pipeline == "hybrid":
             cmd += ["--cache-dir", str(dest / "structures")]
         start = time.monotonic()
         with (dest / "stderr.log").open("wb") as log:

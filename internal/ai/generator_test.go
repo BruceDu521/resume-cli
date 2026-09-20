@@ -60,6 +60,24 @@ func TestProviderFailures(t *testing.T) {
 		t.Fatal("missing key")
 	}
 }
+
+func TestK3StrictSchemaAndReasoningContract(t *testing.T) {
+	r := Remote{Provider: "kimi", Model: "kimi-k3", Key: "synthetic", BaseURL: "https://example.invalid", HTTP: &Transport{Client: doFunc(func(req *http.Request) (*http.Response, error) {
+		var body map[string]any
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		format := body["response_format"].(map[string]any)
+		if body["reasoning_effort"] != "low" || body["max_completion_tokens"] != float64(16000) || body["max_tokens"] != nil || body["thinking"] != nil || format["type"] != "json_schema" || format["json_schema"].(map[string]any)["strict"] != true {
+			t.Fatal(body)
+		}
+		return response(200, `{"model":"kimi-k3","choices":[{"finish_reason":"stop","message":{"content":"{}","reasoning_content":"not output"}}],"usage":{"prompt_tokens":100,"completion_tokens":20}}`), nil
+	})}}
+	b, _, err := r.Generate(context.Background(), Request{Schema: object(map[string]any{})})
+	if err != nil || string(b) != "{}" {
+		t.Fatal(string(b), err)
+	}
+}
 func TestEstimate(t *testing.T) {
 	u := Usage{Model: "gemini-3.8-flash", Input: 1000000, Output: 1000000, Known: true}
 	estimate(&u, time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC))
@@ -70,6 +88,11 @@ func TestEstimate(t *testing.T) {
 	estimate(&u, time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC))
 	if u.CostUSD != nil {
 		t.Fatal("stale promotional price")
+	}
+	u = Usage{Model: "kimi-k3", Input: 1000, Output: 100, Known: true, Attempts: 1}
+	estimate(&u, time.Now())
+	if u.CostUSD == nil || u.CostComplete || u.CostNote == "" {
+		t.Fatal("K3 cache-write costs must not be reported as complete", u)
 	}
 }
 
@@ -99,5 +122,22 @@ func TestStructureValidation(t *testing.T) {
 	s.Generator = fakeGenerator{value: domain.Job{Requirements: []domain.Requirement{{ID: "r1", Category: "skill", Text: "Go", Required: true}}}}
 	if _, e := s.Job(context.Background(), "Go"); e != nil {
 		t.Fatal(e)
+	}
+}
+
+func TestKimiCodeDoesNotPretendSubscriptionIsPayPerToken(t *testing.T) {
+	r := Remote{Provider: "kimi", Model: "k3", Key: "synthetic", BaseURL: "https://api.kimi.com/coding/v1", HTTP: &Transport{Client: doFunc(func(req *http.Request) (*http.Response, error) {
+		var body map[string]any
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body["model"] != "k3" || body["reasoning_effort"] != "low" || body["max_completion_tokens"] == nil {
+			t.Fatal(body)
+		}
+		return response(200, `{"model":"kimi-k3","choices":[{"finish_reason":"stop","message":{"content":"{}"}}],"usage":{"prompt_tokens":100,"completion_tokens":20}}`), nil
+	})}}
+	_, u, err := r.Generate(context.Background(), Request{Schema: object(map[string]any{})})
+	if err != nil || !u.Known || u.CostUSD != nil || u.CostComplete || u.CostNote == "" {
+		t.Fatal(u, err)
 	}
 }

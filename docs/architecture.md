@@ -8,7 +8,7 @@ parse 只调用本地 Poppler。extract 在解析后生成 Candidate，并投影
 
 hybrid：本地 PDF → 简历/JD 并发结构化 → 严格校验 → Jev 批量判断 → 领域评分 → 模板报告。可选 AI 报告只消费确定的 Assessment，不修改分数。
 
-baseline：同一本地原始文本 → OpenAI / Kimi 独立完成提取、要求整理、逐项判断与报告 → 相同来源校验和代码评分。不消费 Jev 的结果，也不把对照输出当标准答案。
+single（baseline 兼容别名）：同一本地原始文本 → 任一所选生成供应商独立完成提取、要求整理、逐项判断与报告 → 相同来源校验和代码评分。不消费 Jev 的结果，也不把对照输出当标准答案。
 
 只保留实际替换点的接口，不使用通用 Agent 框架、数据库或依赖注入容器。
 
@@ -42,7 +42,7 @@ Candidate.Ground 在来源验证后将引用扩展为完整来源行，保留否
 
 ## Jev 与生成式模型
 
-生成式适配器复用 Generator.Generate，但保持供应商差异：Gemini Interactions 的 steps/model_output、schema、thinking_level；其他三家的 Chat Completions 格式、思考与 usage 映射均独立处理。
+生成式适配器复用 Generator.Generate，但保持供应商差异：Gemini Interactions 的 steps/model_output、schema、thinking_level；其他三家的 Chat Completions 格式、思考与 usage 映射均独立处理。K3 使用 low reasoning 和严格 JSON Schema；开放平台模型为 kimi-k3，Code 订阅为 k3，端点及账务不同，不自动互换。
 
 Jev 接收 facts 和 requirements，不发送 Resume 的姓名、电话、邮箱字段。每条要求建立两个独立 Choice：
 
@@ -75,7 +75,7 @@ JD 未要求的维度从总分分母中移除；固定数字字段保留 100，�
 
 PDF 20 MiB、文本 160 KiB、JD 64 KiB、AI 响应 2 MiB。PDF 先有界读取，再写入私有临时文件，通过参数数组调用 Poppler，避免 shell 和文件名选项注入。子进程受 context 控制，结束清理临时文件。容器必须有 poppler-data；已用中文 CID 字体样例验证缺包修复。
 
-两个结构化 worker 同时启动；任一失败取消另一个，并等待两个退出再返回，避免遗留请求与漏记用量。总命令默认 90s；HTTP 单次 60s；最多三次针对 429/529/502/503/504 的重试，尊重有界 Retry-After，不重试不明网络错误或 401。JSON/schema 或 Candidate/Job 来源校验失败时，在任务层最多从原始输入重新生成一次；纠正后仍完整校验。端点只接受 HTTPS，禁止重定向。
+两个结构化 worker 同时启动；任一失败取消另一个，并等待两个退出再返回，避免遗留请求与漏记用量。总命令默认 90s；HTTP 单次 60s；最多三次针对 429/529/502/503/504 的重试，尊重有界 Retry-After，不重试不明网络错误或 401。JSON/schema、Candidate/Job 来源或 single 整体契约校验失败时，在任务层最多从原始输入重新生成一次；纠正后仍完整校验。端点只接受 HTTPS，禁止重定向。
 
 JSON 修复仅去完整代码围栏/BOM、移除字符串外尾逗号。拒绝重复键、null、深度超过 64、缺失/未知字段、类型错误及多份 JSON。修复不能填补事实。结构化输出/来源校验失败后有一次有上限的纠正生成：复用原始输入，要求符合 schema、引用原文，不发送不可信的前次输出或错误文本。每次调用分别记录 stage（额外调用以 _validation_retry 标记）、耗时与费用；两次仍失败则报错。领域校验不因重试而放宽。
 

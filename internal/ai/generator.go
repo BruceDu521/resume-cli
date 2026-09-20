@@ -107,7 +107,13 @@ func (r *Remote) Generate(ctx context.Context, q Request) ([]byte, Usage, error)
 		body["max_completion_tokens"] = 16000
 		body["reasoning_effort"] = "low"
 	case "kimi":
-		body["max_tokens"] = 16000
+		if r.Model == "kimi-k3" || r.Model == "k3" || r.Model == "k3-256k" {
+			body["max_completion_tokens"] = 16000
+			body["reasoning_effort"] = "low"
+			body["response_format"] = map[string]any{"type": "json_schema", "json_schema": map[string]any{"name": "resume_analysis", "strict": true, "schema": q.Schema}}
+		} else {
+			body["max_tokens"] = 16000
+		}
 	default:
 		return nil, u, errors.New("unsupported model provider")
 	}
@@ -144,6 +150,10 @@ func (r *Remote) Generate(ctx context.Context, q Request) ([]byte, Usage, error)
 		u.Known = true
 	}
 	estimate(&u, start)
+	if endpoint, err := url.Parse(r.BaseURL); err == nil && r.Provider == "kimi" && strings.HasPrefix(endpoint.Path, "/coding") {
+		u.CostUSD, u.PriceDate, u.CostComplete = nil, "", false
+		u.CostNote = "Kimi Code subscription quota; no per-request USD billing estimate"
+	}
 	if len(result.Choices) != 1 || result.Choices[0].Finish != "stop" || result.Choices[0].Message.Refusal != "" || strings.TrimSpace(result.Choices[0].Message.Content) == "" {
 		return nil, u, errors.New("AI response refused, incomplete, or empty")
 	}

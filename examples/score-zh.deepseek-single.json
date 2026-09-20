@@ -1,0 +1,81 @@
+{
+  "overall_score": 65,
+  "skill_score": 100,
+  "experience_score": 0,
+  "education_score": 100,
+  "not_required": [],
+  "findings": [
+    {
+      "requirement": {
+        "id": "r1",
+        "category": "skill",
+        "text": "熟悉 Go / PostgreSQL",
+        "required": true
+      },
+      "judgment": {
+        "requirement_id": "r1",
+        "status": "satisfied",
+        "score": 100,
+        "evidence_id": "f2",
+        "confidence": 0.9
+      },
+      "evidence": {
+        "id": "f2",
+        "category": "experience",
+        "block_id": "b5",
+        "quote": "Go / PostgreSQL 后端开发，2022-2025"
+      }
+    },
+    {
+      "requirement": {
+        "id": "r2",
+        "category": "experience",
+        "text": "能够独立承担 Kubernetes 生产运维",
+        "required": true
+      },
+      "judgment": {
+        "requirement_id": "r2",
+        "status": "unmet",
+        "score": 0,
+        "evidence_id": "f3",
+        "confidence": 0.9
+      },
+      "evidence": {
+        "id": "f3",
+        "category": "experience",
+        "block_id": "b6",
+        "quote": "Kubernetes 部署；尚未承担生产故障处理。"
+      }
+    },
+    {
+      "requirement": {
+        "id": "r3",
+        "category": "education",
+        "text": "本科",
+        "required": true
+      },
+      "judgment": {
+        "requirement_id": "r3",
+        "status": "satisfied",
+        "score": 100,
+        "evidence_id": "f1",
+        "confidence": 0.95
+      },
+      "evidence": {
+        "id": "f1",
+        "category": "education",
+        "block_id": "b4",
+        "quote": "示例大学 | 软件工程 | 本科 | 2022"
+      }
+    }
+  ],
+  "policy_version": "evidence-v1",
+  "comment": "候选人具备本科软件工程学历，并有 Go/PostgreSQL 后端开发经历，JD 学历与 Go/PostgreSQL 要求基本满足；但明确表示尚未承担生产故障处理，与“独立承担 Kubernetes 生产运维”不符，Kubernetes 方面仅能体现部署经验，未达到独立生产运维要求。",
+  "interview_questions": [
+    "请具体说明你在 Kubernetes 上做过的部署工作，包括集群规模、部署方式和所用工具。",
+    "你提到尚未承担生产故障处理，如果线上 Kubernetes 集群出现 Pod 反复重启，你会如何排查和止血？",
+    "在 Go/PostgreSQL 后端开发中，你独立负责过哪些模块？请举例说明数据库设计或性能优化经历。"
+  ],
+  "language": "zh",
+  "mock": false
+}

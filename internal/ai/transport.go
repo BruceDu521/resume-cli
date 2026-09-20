@@ -114,6 +114,7 @@ type Usage struct {
 	CostUSD      *float64 `json:"estimated_cost_usd,omitempty"`
 	PriceDate    string   `json:"price_date,omitempty"`
 	CostComplete bool     `json:"cost_complete"`
+	CostNote     string   `json:"cost_note,omitempty"`
 }
 
 func estimate(u *Usage, now time.Time) {
@@ -146,5 +147,11 @@ func estimate(u *Usage, now time.Time) {
 		u.CostUSD = &cost
 		u.PriceDate = "2026-09-20"
 		u.CostComplete = u.Attempts <= 1
+		if u.Model == "kimi-k3" {
+			// K3 separately bills cache writes. The current adapter records input,
+			// hits and output but does not establish TTL-specific write usage.
+			u.CostComplete = false
+			u.CostNote = "input/output USD list-price estimate only; K3 cache-write charges are not included"
+		}
 	}
 }

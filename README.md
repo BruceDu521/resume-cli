@@ -2,7 +2,7 @@
 
 Go PDF 简历分析 CLI：本地提取文本，整理带原文证据的简历和岗位要求，由 Jev 判断匹配情况，再由代码计算分数并生成报告。
 
-**已实现三个命令及全部增强功能，并完成 Gemini / DeepSeek / Jev 真实 API 测试。最终 96 次合成评分均成功；提取仍有技能遗漏，不能将调用成功率视为准确率。详见 [实测报告](docs/evaluation-results-2026-09-20.md)。**
+**已实现三个命令及全部增强功能，支持单模型与 Jev 组合。最新完成 DS/Gemini 四路径 128 次对照及 Kimi Code K3 16 次验证，见 [单模型与组合实测](docs/evaluation-single-vs-hybrid-2026-09-20.md)。调用成功率不等于准确率，提取遗漏与模型判断分歧均有记录。**
 
 ## 项目简介
 
@@ -10,7 +10,7 @@ Go PDF 简历分析 CLI：本地提取文本，整理带原文证据的简历和
 | --- | --- | --- |
 | `parse <pdf>` | 提取本地 PDF 文本 | 无 |
 | `extract <pdf>` | 姓名、联系方式、城市、教育、技能 | 生成模型 |
-| `score <pdf> --jd <txt>` | 分数、证据、评论、面试问题 | 生成模型 + Jev |
+| `score <pdf> --jd <txt>` | 分数、证据、评论、面试问题 | single：一个生成模型；hybrid：生成模型 + Jev |
 
 简历和 JD 的整理阶段并行、可分别缓存。评分区分“未体现”与“明确不符”，来源证据随报告保留。
 
@@ -79,9 +79,21 @@ flowchart LR
 
 参考 [.env.example](.env.example)。CLI **不会自动加载 `.env`**，通过 shell、运行环境或 Docker 注入；密钥不放在命令行参数中。
 
+本机可复制示例后编辑 key，再在可信的项目目录中加载自己填写的文件：
+
+```sh
+cp -n .env.example .env
+chmod 600 .env
+# 编辑 .env 后，在当前 shell 加载；文件已被 Git 忽略
+set -a
+. ./.env
+set +a
+```
+
 | 变量 | 用途 / 默认值 |
 | --- | --- |
 | `RESUME_AI_PROVIDER` | `gemini` / `deepseek` / `openai` / `kimi`，无默认值 |
+| `RESUME_AI_PIPELINE` | `single` / `hybrid`，默认 hybrid；`baseline` 为 single 兼容别名 |
 | `RESUME_AI_MODEL` | 可选模型覆盖；跨供应商切换时应取消该变量 |
 | `GEMINI_API_KEY` / `DEEPSEEK_API_KEY` | 对应生成供应商 |
 | `TYPESAFE_API_KEY` | 真实 hybrid 评分的 Jev 密钥 |
@@ -90,9 +102,9 @@ flowchart LR
 | `RESUME_LOG_LEVEL` | debug / info / warn / error，默认 info |
 | `RESUME_AI_BASE_URL` / `TYPESAFE_BASE_URL` | 可选 HTTPS API 地址，默认官方地址 |
 
-模型预设为 `gemini-3.8-flash`、`deepseek-flash`、`gpt-6-astra`、`kimi-k3`。前三条已实测的 API 为 Gemini、DeepSeek 和 Jev；OpenAI/Kimi 适配器仅通过离线契约测试，尚缺 key 验证。parse / mock 不检查 key。
+模型预设为 `gemini-3.8-flash`、`deepseek-flash`、`gpt-6-astra`、`kimi-k3`。前三条已实测的 API 为 Gemini、DeepSeek 和 Jev；Kimi Code K3 已接通其订阅端点；OpenAI 暂缓，Kimi 开放平台尚无对应 key。parse / mock 不检查 key。`extract` 只用所选生成模型，single 评分也只需该供应商 key；只有 hybrid 评分读取 Jev key。参数覆盖环境变量；key 不支持命令行参数。
 
-本次评分可优先试 `--provider deepseek`：48 次评分的中位耗时 2.59 秒，平均估算 $0.00062/份（含 Jev）；Gemini 为 3.77 秒、$0.00249/份。但两家都有技能数组遗漏，Gemini 1/48、DeepSeek 3/48，暂不设置全局默认供应商。`.env.example` 的 DeepSeek 是便于试运行的示例选择。
+本轮成本优先的评分可试 `--provider deepseek --pipeline hybrid`：32 次中位耗时 2.61 秒，平均估算 $0.000621/次（含 Jev）；单 DeepSeek 为 2.61 秒、$0.000795/次。只配一个 key 可用 single；更完整的质量和速度对照见上面的报告。生成供应商仍无全局默认，`.env.example` 的 DeepSeek 是示例选择。此前结构化提取的遗漏见 [初轮报告](docs/evaluation-results-2026-09-20.md)。
 
 ```sh
 # 已注入对应 key 后
@@ -104,6 +116,29 @@ bin/resume-cli score resume.pdf --jd jd.txt --provider openai --pipeline baselin
 bin/resume-cli score resume.pdf --jd jd.txt --provider kimi --pipeline baseline
 ```
 
+## 选择单模型或组合模式
+
+原题不限定模型数量或凭据传递方式；本工具让两种模式共用 PDF、严格校验、代码评分和输出结构。
+
+```sh
+# Key 已通过环境变量注入。仅 DeepSeek，不需要 Jev key
+bin/resume-cli score resume.pdf --jd jd.txt --provider deepseek --pipeline single
+# 或通过环境变量选择，命令行参数优先
+export RESUME_AI_PROVIDER=gemini
+export RESUME_AI_PIPELINE=single
+export RESUME_AI_MODEL=gemini-3.8-flash
+bin/resume-cli score resume.pdf --jd jd.txt
+# 组合模式需要所选供应商和 Jev 两个 key
+bin/resume-cli score resume.pdf --jd jd.txt --provider deepseek --model deepseek-flash --pipeline hybrid
+# Kimi Code 订阅使用其专用接口和模型 ID；不能混用开放平台 key
+bin/resume-cli score resume.pdf --jd jd.txt --provider kimi --model k3 \
+  --base-url https://api.kimi.com/coding/v1 --pipeline single
+```
+
+single 一次生成事实、要求、逐项状态和评论/问题，随后来源验证与代码算分；校验不通过最多再生成一次。它不依赖 Jev，不使用结构化缓存。hybrid 并行整理简历/JD、调用 Jev、默认模板报告，支持结构化缓存和可选 AI 报告。少一个模型不必然更快：一次生成的内容量、推理配置和报告方式也影响费用及延迟。
+
+Kimi Code 与开放平台分别计费，订阅额度不能换算成确定的每请求费用；stats 保留 tokens，美元费用标为未知。开放平台 K3 的估算尚未包含额外缓存写入费用，明确标记 cost_complete=false。
+
 ## CLI 命令说明
 
 三个命令支持 `--help`。结果写 stdout，日志和错误写 stderr；成功退出码 0，失败为非 0。
@@ -112,11 +147,12 @@ bin/resume-cli score resume.pdf --jd jd.txt --provider kimi --pipeline baseline
 | --- | --- |
 | `--output <path>` | 保存文本或 JSON，不重复写 stdout |
 | `--force` | 允许替换已有输出，禁止覆盖输入或其别名 |
-| `--mock` | 合成演示；不能与 baseline / AI 报告组合 |
+| `--mock` | 合成演示；不能与 single / AI 报告组合 |
 | `--lang zh\|en` | 默认 zh；只控制评论和问题，事实、引用不翻译 |
-| `--provider` / `--model` | 覆盖相应环境变量 |
-| `--pipeline hybrid\|baseline` | score 路径，默认 hybrid |
-| `--report template\|ai` | hybrid 报告，默认 template；baseline 自带报告 |
+| `--provider` / `--model` / `--base-url` | 覆盖相应环境变量 |
+| `--jev-model` | 覆盖 RESUME_JEV_MODEL，仅 hybrid 使用 |
+| `--pipeline single\|hybrid` | score 路径，默认 hybrid；覆盖 RESUME_AI_PIPELINE，baseline 为 single 别名 |
+| `--report template\|ai` | hybrid 报告，默认 template；single 自带报告 |
 | `--cache-dir <dir>` | 显式启用结构化缓存，默认关闭 |
 | `--stats <path>` | 保存成功或失败的耗时、调用、用量、缓存命中 |
 | `--timeout <duration>` | 默认 90s，大于 0 且不超过 10m |
@@ -139,6 +175,8 @@ bin/resume-cli score resume.pdf --jd jd.txt --provider kimi --pipeline baseline
   "education_score": 100
 }
 ```
+
+单模型实际输出：[DeepSeek single 中文 score](examples/score-zh.deepseek-single.json)。
 
 真实合成样例：[DeepSeek 中文 extract](examples/extract-zh.deepseek.json)、[DeepSeek + Jev 中文 score](examples/score-zh.deepseek-jev.json)、[Gemini + Jev 英文 score](examples/score-en.gemini-jev.json)。真实评分样例为 65 分，生产运维项按明确否定记 0；mock 中的部分匹配是固定演示，不作为模型真值。
 
@@ -171,7 +209,7 @@ make vet
 make check
 ```
 
-2026-09-20：全部 Go 测试、竞态检查及 vet 通过。总体语句覆盖率 **87.5%**，领域规则 **96.1%**，AI 适配器 **90.5%**。Docker 禁网验证三个命令通过。覆盖率不代表真实模型正确率。
+2026-09-20：全部 Go 测试、竞态检查及 vet 通过。总体语句覆盖率 **88.4%**，领域规则 **96.1%**，AI 适配器 **90.8%**。Docker 禁网验证三个命令通过。覆盖率不代表真实模型正确率。
 
 JSON 修复器另外运行约 10 秒 fuzz，执行 478,049 次输入，无失败。
 
@@ -183,8 +221,11 @@ python3 scripts/evaluate.py --routes mock --repeats 1 --execute --out .local/eva
 # 有 key 后做小规模真实冒烟
 python3 scripts/evaluate.py --routes gemini deepseek --limit 2 --repeats 1 \
   --execute --out .local/eval-api-smoke
-# 四条路径，各样例三次，打乱顺序
-python3 scripts/evaluate.py --execute --out .local/eval-full
+# 单模型与组合，四条路径，打乱顺序
+python3 scripts/evaluate.py --routes deepseek_single gemini_single deepseek gemini \
+  --repeats 2 --execute --out .local/eval-comparison
+# Kimi Code 订阅，明确使用 k3；另外单独运行
+python3 scripts/evaluate.py --routes kimi_code --repeats 1 --execute --out .local/eval-k3
 ```
 
 12 个开发案例和 4 个补充回归案例；后者曾用于发现问题并调整提示词，最终已不算独立保留集。保存每次结果、stats、错误日志、检查表和汇总。统计包含失败，质量按原文检查，不能仅依赖脚本。Gemini / DeepSeek 比较质量与速度，接近时优先便宜的 DeepSeek；OpenAI / Kimi 为独立完整对照。见 [评测协议](docs/evaluation.md)。
@@ -199,7 +240,7 @@ python3 scripts/evaluate.py --execute --out .local/eval-full
 
 ## 已知问题与未完成内容
 
-- Gemini/DeepSeek/Jev 已实测，OpenAI/Kimi 缺 key，未实测；生成模型暂时仍需显式选择。
+- Gemini/DeepSeek/Jev 与 Kimi Code K3 已接通；OpenAI 暂缓，Kimi 开放平台缺对应 key；生成模型仍需显式选择。
 - 两家生成模型均出现公开 skills 数组为空但 facts 保留技能证据的情况；DeepSeek 另有两次要求分类差异。来源校验能拒绝虚构引用，无法证明提取完整。
 - 合成集较小，尚无独立保留测试集，不能据此声称生产准确率。多栏 PDF 只有基础解析用例。
 - 不做 OCR、加密文件解锁、数据库和批处理服务。

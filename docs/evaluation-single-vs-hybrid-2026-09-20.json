@@ -1,0 +1,758 @@
+{
+  "scope": "Synthetic engineering regression comparison; not independent accuracy. DS/Gemini two repeats per case; Kimi Code one repeat in a later time window.",
+  "routes": {
+    "deepseek": {
+      "runs": 32,
+      "successes": 32,
+      "full_rubric_pass": 30,
+      "wall_ms": {
+        "median": 2607.0,
+        "min": 1987,
+        "max": 3089
+      },
+      "known_estimated_usd_per_attempt": 0.000620602875,
+      "known_estimated_usd_total": 0.019859292,
+      "all_recorded_call_costs_complete": true,
+      "input_tokens_total": 94272,
+      "output_tokens_total": 18076,
+      "correction_generations": 1,
+      "response_models": [
+        "deepseek-flash",
+        "jev-1.13.0"
+      ],
+      "differences": [
+        {
+          "case": "en-core",
+          "route": "deepseek",
+          "repeat": 2,
+          "issues": [
+            "required/preferred mismatch: Go",
+            "required/preferred mismatch: Kubernetes",
+            "required/preferred mismatch: Bachelor"
+          ],
+          "canonical": [
+            [
+              "Go",
+              "skill",
+              false,
+              "satisfied"
+            ],
+            [
+              "Kubernetes",
+              "experience",
+              false,
+              "unmet"
+            ],
+            [
+              "Bachelor",
+              "education",
+              false,
+              "satisfied"
+            ]
+          ],
+          "review_flags": []
+        },
+        {
+          "case": "missing-rust",
+          "route": "deepseek",
+          "repeat": 1,
+          "issues": [
+            "category Rust: experience, expected skill"
+          ],
+          "canonical": [
+            [
+              "Rust",
+              "experience",
+              true,
+              "unknown"
+            ]
+          ],
+          "review_flags": []
+        }
+      ],
+      "source_plan": {
+        "seed": 20260920,
+        "cache": "fresh per trial",
+        "code_sha256": "6d9c2da1b53b2188fc9d19ba13e5a6ff6d92460dc838bbdca6d13f28b3bcb739",
+        "runner_sha256": "5bd3bf4f2a82d0d60d727527f063e54bbe3f036dcf0e5d50f8cc93f43c07b020",
+        "manifest_sha256": "aa9a0ea2a7f3a07e7119c46d51dd0627ece19f5ff1b1b96a73b8f3e4c551e831",
+        "models": {
+          "deepseek_single": [
+            "deepseek",
+            "single",
+            "deepseek-flash"
+          ],
+          "gemini_single": [
+            "gemini",
+            "single",
+            "gemini-3.8-flash"
+          ],
+          "deepseek": [
+            "deepseek",
+            "hybrid",
+            "deepseek-flash"
+          ],
+          "gemini": [
+            "gemini",
+            "hybrid",
+            "gemini-3.8-flash"
+          ]
+        },
+        "jev": "jev-1.13.0",
+        "kimi_base_url": "https://api.moonshot.ai/v1",
+        "kimi_reasoning_effort": "low"
+      }
+    },
+    "deepseek_single": {
+      "runs": 32,
+      "successes": 31,
+      "full_rubric_pass": 20,
+      "wall_ms": {
+        "median": 2614.0,
+        "min": 1900,
+        "max": 5798
+      },
+      "known_estimated_usd_per_attempt": 0.0007954267499999999,
+      "known_estimated_usd_total": 0.025453655999999998,
+      "all_recorded_call_costs_complete": true,
+      "input_tokens_total": 38330,
+      "output_tokens_total": 18434,
+      "correction_generations": 2,
+      "response_models": [
+        "deepseek-flash"
+      ],
+      "differences": [
+        {
+          "case": "en-core",
+          "route": "deepseek_single",
+          "repeat": 1,
+          "issues": [
+            "status Kubernetes: partial"
+          ],
+          "canonical": [
+            [
+              "Go",
+              "skill",
+              true,
+              "satisfied"
+            ],
+            [
+              "Kubernetes",
+              "experience",
+              true,
+              "partial"
+            ],
+            [
+              "Bachelor",
+              "education",
+              true,
+              "satisfied"
+            ]
+          ],
+          "review_flags": []
+        },
+        {
+          "case": "en-core",
+          "route": "deepseek_single",
+          "repeat": 2,
+          "issues": [
+            "status Kubernetes: partial"
+          ],
+          "canonical": [
+            [
+              "Go",
+              "skill",
+              true,
+              "satisfied"
+            ],
+            [
+              "Kubernetes",
+              "experience",
+              true,
+              "partial"
+            ],
+            [
+              "Bachelor",
+              "education",
+              true,
+              "satisfied"
+            ]
+          ],
+          "review_flags": []
+        },
+        {
+          "case": "heldout-en-missing",
+          "route": "deepseek_single",
+          "repeat": 1,
+          "issues": [
+            "status Python: partial"
+          ],
+          "canonical": [
+            [
+              "Kafka",
+              "skill",
+              true,
+              "unknown"
+            ],
+            [
+              "Python",
+              "skill",
+              false,
+              "partial"
+            ],
+            [
+              "Bachelor",
+              "education",
+              true,
+              "satisfied"
+            ]
+          ],
+          "review_flags": []
+        },
+        {
+          "case": "heldout-en-missing",
+          "route": "deepseek_single",
+          "repeat": 2,
+          "issues": [
+            "status Python: partial"
+          ],
+          "canonical": [
+            [
+              "Kafka",
+              "skill",
+              true,
+              "unknown"
+            ],
+            [
+              "Python",
+              "skill",
+              false,
+              "partial"
+            ],
+            [
+              "Bachelor",
+              "education",
+              true,
+              "satisfied"
+            ]
+          ],
+          "review_flags": []
+        },
+        {
+          "case": "heldout-en-positive",
+          "route": "deepseek_single",
+          "repeat": 1,
+          "issues": [
+            "status Rust: partial",
+            "status Kubernetes: partial"
+          ],
+          "canonical": [
+            [
+              "Rust",
+              "skill",
+              true,
+              "partial"
+            ],
+            [
+              "Kubernetes",
+              "skill",
+              true,
+              "partial"
+            ],
+            [
+              "backups",
+              "experience",
+              true,
+              "satisfied"
+            ]
+          ],
+          "review_flags": []
+        },
+        {
+          "case": "heldout-zh-positive",
+          "route": "deepseek_single",
+          "repeat": 2,
+          "issues": [
+            "required/preferred mismatch: Python",
+            "required/preferred mismatch: MySQL",
+            "required/preferred mismatch: 事故处理"
+          ],
+          "canonical": [
+            [
+              "Python",
+              "skill",
+              false,
+              "satisfied"
+            ],
+            [
+              "MySQL",
+              "skill",
+              false,
+              "satisfied"
+            ],
+            [
+              "事故处理",
+              "experience",
+              false,
+              "satisfied"
+            ]
+          ],
+          "review_flags": []
+        },
+        {
+          "case": "jd-instruction",
+          "route": "deepseek_single",
+          "repeat": 2,
+          "issues": [
+            "status Go: partial"
+          ],
+          "canonical": [
+            [
+              "Go",
+              "skill",
+              true,
+              "partial"
+            ]
+          ],
+          "review_flags": []
+        },
+        {
+          "case": "missing-rust",
+          "route": "deepseek_single",
+          "repeat": 1,
+          "issues": [
+            "category Rust: experience, expected skill",
+            "status Rust: unmet"
+          ],
+          "canonical": [
+            [
+              "Rust",
+              "experience",
+              true,
+              "unmet"
+            ]
+          ],
+          "review_flags": []
+        },
+        {
+          "case": "missing-rust",
+          "route": "deepseek_single",
+          "repeat": 2,
+          "issues": [
+            "category Rust: experience, expected skill"
+          ],
+          "canonical": [
+            [
+              "Rust",
+              "experience",
+              true,
+              "unknown"
+            ]
+          ],
+          "review_flags": []
+        },
+        {
+          "case": "mixed",
+          "route": "deepseek_single",
+          "repeat": 1,
+          "issues": [
+            "status Go: partial",
+            "status PostgreSQL: partial"
+          ],
+          "canonical": [
+            [
+              "Go",
+              "skill",
+              true,
+              "partial"
+            ],
+            [
+              "PostgreSQL",
+              "skill",
+              true,
+              "partial"
+            ],
+            [
+              "本科",
+              "education",
+              true,
+              "satisfied"
+            ]
+          ],
+          "review_flags": []
+        },
+        {
+          "case": "mixed",
+          "route": "deepseek_single",
+          "repeat": 2,
+          "issues": [
+            "command failed; see stderr and stats"
+          ],
+          "canonical": [],
+          "review_flags": []
+        },
+        {
+          "case": "zh-core",
+          "route": "deepseek_single",
+          "repeat": 2,
+          "issues": [
+            "status Kubernetes: partial"
+          ],
+          "canonical": [
+            [
+              "Go",
+              "skill",
+              true,
+              "satisfied"
+            ],
+            [
+              "Kubernetes",
+              "experience",
+              true,
+              "partial"
+            ],
+            [
+              "本科",
+              "education",
+              true,
+              "satisfied"
+            ]
+          ],
+          "review_flags": []
+        }
+      ],
+      "source_plan": {
+        "seed": 20260920,
+        "cache": "fresh per trial",
+        "code_sha256": "6d9c2da1b53b2188fc9d19ba13e5a6ff6d92460dc838bbdca6d13f28b3bcb739",
+        "runner_sha256": "5bd3bf4f2a82d0d60d727527f063e54bbe3f036dcf0e5d50f8cc93f43c07b020",
+        "manifest_sha256": "aa9a0ea2a7f3a07e7119c46d51dd0627ece19f5ff1b1b96a73b8f3e4c551e831",
+        "models": {
+          "deepseek_single": [
+            "deepseek",
+            "single",
+            "deepseek-flash"
+          ],
+          "gemini_single": [
+            "gemini",
+            "single",
+            "gemini-3.8-flash"
+          ],
+          "deepseek": [
+            "deepseek",
+            "hybrid",
+            "deepseek-flash"
+          ],
+          "gemini": [
+            "gemini",
+            "hybrid",
+            "gemini-3.8-flash"
+          ]
+        },
+        "jev": "jev-1.13.0",
+        "kimi_base_url": "https://api.moonshot.ai/v1",
+        "kimi_reasoning_effort": "low"
+      }
+    },
+    "gemini": {
+      "runs": 32,
+      "successes": 32,
+      "full_rubric_pass": 32,
+      "wall_ms": {
+        "median": 3847.5,
+        "min": 3336,
+        "max": 6423
+      },
+      "known_estimated_usd_per_attempt": 0.0025362759375,
+      "known_estimated_usd_total": 0.08116083,
+      "all_recorded_call_costs_complete": true,
+      "input_tokens_total": 89771,
+      "output_tokens_total": 24459,
+      "correction_generations": 0,
+      "response_models": [
+        "gemini-3.8-flash",
+        "jev-1.13.0"
+      ],
+      "differences": [],
+      "source_plan": {
+        "seed": 20260920,
+        "cache": "fresh per trial",
+        "code_sha256": "6d9c2da1b53b2188fc9d19ba13e5a6ff6d92460dc838bbdca6d13f28b3bcb739",
+        "runner_sha256": "5bd3bf4f2a82d0d60d727527f063e54bbe3f036dcf0e5d50f8cc93f43c07b020",
+        "manifest_sha256": "aa9a0ea2a7f3a07e7119c46d51dd0627ece19f5ff1b1b96a73b8f3e4c551e831",
+        "models": {
+          "deepseek_single": [
+            "deepseek",
+            "single",
+            "deepseek-flash"
+          ],
+          "gemini_single": [
+            "gemini",
+            "single",
+            "gemini-3.8-flash"
+          ],
+          "deepseek": [
+            "deepseek",
+            "hybrid",
+            "deepseek-flash"
+          ],
+          "gemini": [
+            "gemini",
+            "hybrid",
+            "gemini-3.8-flash"
+          ]
+        },
+        "jev": "jev-1.13.0",
+        "kimi_base_url": "https://api.moonshot.ai/v1",
+        "kimi_reasoning_effort": "low"
+      }
+    },
+    "gemini_single": {
+      "runs": 32,
+      "successes": 32,
+      "full_rubric_pass": 27,
+      "wall_ms": {
+        "median": 3609.0,
+        "min": 2999,
+        "max": 4634
+      },
+      "known_estimated_usd_per_attempt": 0.00293128125,
+      "known_estimated_usd_total": 0.093801,
+      "all_recorded_call_costs_complete": true,
+      "input_tokens_total": 19638,
+      "output_tokens_total": 21086,
+      "correction_generations": 0,
+      "response_models": [
+        "gemini-3.8-flash"
+      ],
+      "differences": [
+        {
+          "case": "en-core",
+          "route": "gemini_single",
+          "repeat": 1,
+          "issues": [
+            "status Kubernetes: partial"
+          ],
+          "canonical": [
+            [
+              "Go",
+              "skill",
+              true,
+              "satisfied"
+            ],
+            [
+              "Kubernetes",
+              "experience",
+              true,
+              "partial"
+            ],
+            [
+              "Bachelor",
+              "education",
+              true,
+              "satisfied"
+            ]
+          ],
+          "review_flags": []
+        },
+        {
+          "case": "en-core",
+          "route": "gemini_single",
+          "repeat": 2,
+          "issues": [
+            "status Kubernetes: partial"
+          ],
+          "canonical": [
+            [
+              "Go",
+              "skill",
+              true,
+              "satisfied"
+            ],
+            [
+              "Kubernetes",
+              "experience",
+              true,
+              "partial"
+            ],
+            [
+              "Bachelor",
+              "education",
+              true,
+              "satisfied"
+            ]
+          ],
+          "review_flags": []
+        },
+        {
+          "case": "mixed",
+          "route": "gemini_single",
+          "repeat": 1,
+          "issues": [
+            "unexpected/unmapped requirement"
+          ],
+          "canonical": [
+            [
+              "Go",
+              "skill",
+              true,
+              "satisfied"
+            ],
+            [
+              "PostgreSQL",
+              "skill",
+              true,
+              "satisfied"
+            ],
+            [
+              "本科",
+              "education",
+              true,
+              "satisfied"
+            ]
+          ],
+          "review_flags": []
+        },
+        {
+          "case": "zh-core",
+          "route": "gemini_single",
+          "repeat": 1,
+          "issues": [
+            "status Kubernetes: partial"
+          ],
+          "canonical": [
+            [
+              "Go",
+              "skill",
+              true,
+              "satisfied"
+            ],
+            [
+              "Kubernetes",
+              "experience",
+              true,
+              "partial"
+            ],
+            [
+              "本科",
+              "education",
+              true,
+              "satisfied"
+            ]
+          ],
+          "review_flags": []
+        },
+        {
+          "case": "zh-core",
+          "route": "gemini_single",
+          "repeat": 2,
+          "issues": [
+            "status Kubernetes: partial"
+          ],
+          "canonical": [
+            [
+              "Go",
+              "skill",
+              true,
+              "satisfied"
+            ],
+            [
+              "Kubernetes",
+              "experience",
+              true,
+              "partial"
+            ],
+            [
+              "本科",
+              "education",
+              true,
+              "satisfied"
+            ]
+          ],
+          "review_flags": []
+        }
+      ],
+      "source_plan": {
+        "seed": 20260920,
+        "cache": "fresh per trial",
+        "code_sha256": "6d9c2da1b53b2188fc9d19ba13e5a6ff6d92460dc838bbdca6d13f28b3bcb739",
+        "runner_sha256": "5bd3bf4f2a82d0d60d727527f063e54bbe3f036dcf0e5d50f8cc93f43c07b020",
+        "manifest_sha256": "aa9a0ea2a7f3a07e7119c46d51dd0627ece19f5ff1b1b96a73b8f3e4c551e831",
+        "models": {
+          "deepseek_single": [
+            "deepseek",
+            "single",
+            "deepseek-flash"
+          ],
+          "gemini_single": [
+            "gemini",
+            "single",
+            "gemini-3.8-flash"
+          ],
+          "deepseek": [
+            "deepseek",
+            "hybrid",
+            "deepseek-flash"
+          ],
+          "gemini": [
+            "gemini",
+            "hybrid",
+            "gemini-3.8-flash"
+          ]
+        },
+        "jev": "jev-1.13.0",
+        "kimi_base_url": "https://api.moonshot.ai/v1",
+        "kimi_reasoning_effort": "low"
+      }
+    },
+    "kimi_code": {
+      "runs": 16,
+      "successes": 15,
+      "full_rubric_pass": 15,
+      "wall_ms": {
+        "median": 23809.5,
+        "min": 10318,
+        "max": 61208
+      },
+      "known_estimated_usd_per_attempt": null,
+      "known_estimated_usd_total": null,
+      "all_recorded_call_costs_complete": false,
+      "input_tokens_total": 28911,
+      "output_tokens_total": 11898,
+      "correction_generations": 3,
+      "response_models": [
+        "k3"
+      ],
+      "differences": [
+        {
+          "case": "missing-rust",
+          "route": "kimi_code",
+          "repeat": 1,
+          "issues": [
+            "command failed; see stderr and stats"
+          ],
+          "canonical": [],
+          "review_flags": []
+        }
+      ],
+      "source_plan": {
+        "seed": 20260920,
+        "cache": "disabled",
+        "code_sha256": "1eb98a436d35a8f06f3b24e2ea2cc17f8b40677a3558cf73fe19606a9d63f2ba",
+        "runner_sha256": "11473c37de2f5da4adc80d91aa8f15ad868418949e920bd270e8bb4c85c09bbf",
+        "manifest_sha256": "aa9a0ea2a7f3a07e7119c46d51dd0627ece19f5ff1b1b96a73b8f3e4c551e831",
+        "models": {
+          "kimi_code": [
+            "kimi",
+            "single",
+            "k3"
+          ]
+        },
+        "jev": "jev-1.13.0",
+        "kimi_base_url": "https://api.moonshot.ai/v1",
+        "kimi_code_base_url": "https://api.kimi.com/coding/v1",
+        "kimi_reasoning_effort": "low"
+      }
+    }
+  }
+}

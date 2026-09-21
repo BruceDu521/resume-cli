@@ -10,6 +10,12 @@
 private-inputs/
 private-outputs/
 
+# Local manual-test inputs and results (keep committed synthetic fixtures)
+/resume.pdf
+/jd.txt
+/jd.empty
+/result.json
+
 # Build artifacts
 /bin/
 /dist/

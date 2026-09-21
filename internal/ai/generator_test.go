@@ -119,10 +119,7 @@ func TestStructureValidation(t *testing.T) {
 	if _, e := s.Candidate(context.Background(), d); e == nil {
 		t.Fatal("hallucinated evidence")
 	}
-	s.Generator = fakeGenerator{value: domain.Job{Requirements: []domain.Requirement{{ID: "r1", Category: "skill", Text: "Go", Required: true}}}}
-	if _, e := s.Job(context.Background(), "Go"); e != nil {
-		t.Fatal(e)
-	}
+
 }
 
 func TestKimiCodeDoesNotPretendSubscriptionIsPayPerToken(t *testing.T) {

@@ -52,10 +52,11 @@ type Resume struct {
 	Skills    []string    `json:"skills"`
 }
 type Fact struct {
-	ID       string `json:"id"`
-	Category string `json:"category"`
-	BlockID  string `json:"block_id"`
-	Quote    string `json:"quote"`
+	ID         string `json:"id"`
+	Category   string `json:"category"`
+	BlockID    string `json:"block_id"`
+	EndBlockID string `json:"end_block_id,omitempty"`
+	Quote      string `json:"quote"`
 }
 type Candidate struct {
 	Resume Resume `json:"resume"`
@@ -112,31 +113,65 @@ func (c Candidate) Validate(d Document) error {
 	if c.Resume.Education == nil || c.Resume.Skills == nil || c.Facts == nil {
 		return errors.New("candidate collections must be arrays")
 	}
-	values := []string{c.Resume.Name, c.Resume.Phone, c.Resume.Email, c.Resume.City}
-	values = append(values, c.Resume.Skills...)
-	for _, e := range c.Resume.Education {
-		values = append(values, e.School, e.Major, e.Degree, e.GraduationTime)
+	type sourceField struct{ path, value string }
+	values := []sourceField{{"name", c.Resume.Name}, {"phone", c.Resume.Phone}, {"email", c.Resume.Email}, {"city", c.Resume.City}}
+	for i, v := range c.Resume.Skills {
+		values = append(values, sourceField{fmt.Sprintf("skills[%d]", i), v})
+	}
+	for i, e := range c.Resume.Education {
+		for _, v := range []sourceField{{"school", e.School}, {"major", e.Major}, {"degree", e.Degree}, {"graduation_time", e.GraduationTime}} {
+			values = append(values, sourceField{fmt.Sprintf("education[%d].%s", i, v.path), v.value})
+		}
 	}
 	for _, v := range values {
-		if v != "" && !Contains(d.Text, v) {
-			return errors.New("candidate field is not supported by source text")
+		if v.value != "" && !Contains(d.Text, v.value) {
+			return fmt.Errorf("candidate resume.%s is not supported by source text; copy its original spelling and date format", v.path)
 		}
 	}
 	if len(c.Facts) > 64 {
 		return errors.New("too many candidate facts (maximum 64)")
 	}
 	seen := map[string]bool{}
-	blocks := map[string]string{}
-	for _, b := range d.Blocks {
-		blocks[b.ID] = b.Text
-	}
 	for _, f := range c.Facts {
-		if f.ID == "" || seen[f.ID] || !category(f.Category) || !Contains(blocks[f.BlockID], f.Quote) {
-			return errors.New("invalid or unsupported candidate evidence")
+		span, err := d.EvidenceText(f)
+		if f.ID == "" || seen[f.ID] || !category(f.Category) {
+			return errors.New("invalid candidate evidence identity or category")
+		}
+		if err != nil {
+			return err
+		}
+		if !Contains(span, f.Quote) {
+			return errors.New("candidate quote does not match its declared source range")
 		}
 		seen[f.ID] = true
 	}
 	return nil
+}
+
+// EvidenceText resolves only an explicit contiguous source range, never searches
+// the whole document for a replacement location. Page boundaries remain visible.
+func (d Document) EvidenceText(f Fact) (string, error) {
+	start, end := -1, -1
+	endID := f.EndBlockID
+	if endID == "" {
+		endID = f.BlockID
+	}
+	for i, b := range d.Blocks {
+		if b.ID == f.BlockID {
+			start = i
+		}
+		if b.ID == endID {
+			end = i
+		}
+	}
+	if start < 0 || end < start || end-start >= 16 {
+		return "", errors.New("candidate evidence requires a valid range of 1 to 16 adjacent blocks")
+	}
+	lines := make([]string, 0, end-start+1)
+	for _, b := range d.Blocks[start : end+1] {
+		lines = append(lines, b.Text)
+	}
+	return strings.Join(lines, "\n"), nil
 }
 
 // Ground preserves the source context of selected excerpts and supplies source
@@ -147,13 +182,9 @@ func (c Candidate) Ground(d Document) (Candidate, error) {
 		return c, err
 	}
 	c.Facts = append([]Fact{}, c.Facts...)
-	blocks := map[string]Block{}
 	ids := map[string]bool{}
-	for _, b := range d.Blocks {
-		blocks[b.ID] = b
-	}
 	for i, f := range c.Facts {
-		c.Facts[i].Quote = blocks[f.BlockID].Text
+		c.Facts[i].Quote, _ = d.EvidenceText(f)
 		ids[f.ID] = true
 	}
 	type field struct{ value, category string }

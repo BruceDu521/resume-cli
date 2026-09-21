@@ -22,9 +22,9 @@ import (
 )
 
 type options struct {
-	output, jd, lang, provider, model, baseURL, jevModel, pipeline, report, cacheDir, stats string
-	mock, force                                                                             bool
-	timeout                                                                                 time.Duration
+	output, jd, lang, provider, model, baseURL, cacheDir, stats string
+	mock, force                                                 bool
+	timeout                                                     time.Duration
 }
 type recorder struct {
 	mu     sync.Mutex
@@ -45,17 +45,16 @@ func (r *recorder) hit(stage string) {
 	r.hits = append(r.hits, stage)
 	r.logger.Info("cache hit", "stage", stage)
 }
-func (r *recorder) snapshot(elapsed time.Duration, mock bool, pipeline string, success bool) any {
+func (r *recorder) snapshot(elapsed time.Duration, mock bool, success bool) any {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return struct {
-		Success  bool       `json:"success"`
-		Elapsed  int64      `json:"elapsed_ms"`
-		Mock     bool       `json:"mock"`
-		Pipeline string     `json:"pipeline"`
-		Calls    []ai.Usage `json:"calls"`
-		Hits     []string   `json:"cache_hits"`
-	}{success, elapsed.Milliseconds(), mock, pipeline, append([]ai.Usage{}, r.calls...), append([]string{}, r.hits...)}
+		Success bool       `json:"success"`
+		Elapsed int64      `json:"elapsed_ms"`
+		Mock    bool       `json:"mock"`
+		Calls   []ai.Usage `json:"calls"`
+		Hits    []string   `json:"cache_hits"`
+	}{success, elapsed.Milliseconds(), mock, append([]ai.Usage{}, r.calls...), append([]string{}, r.hits...)}
 }
 func New(out, errOut io.Writer, getenv func(string) string) *cobra.Command {
 	if getenv == nil {
@@ -72,11 +71,8 @@ func New(out, errOut io.Writer, getenv func(string) string) *cobra.Command {
 	f.StringVar(&o.lang, "lang", "zh", "报告语言：zh / en")
 	f.StringVar(&o.provider, "provider", getenv("RESUME_AI_PROVIDER"), "生成模型：gemini / deepseek / openai / kimi")
 	f.StringVar(&o.model, "model", getenv("RESUME_AI_MODEL"), "覆盖生成模型 ID")
-	f.StringVar(&o.pipeline, "pipeline", envDefault(getenv, "RESUME_AI_PIPELINE", "hybrid"), "评分路径：single / hybrid（baseline 为 single 别名）")
 	f.StringVar(&o.baseURL, "base-url", getenv("RESUME_AI_BASE_URL"), "生成模型 HTTPS API 地址")
-	f.StringVar(&o.jevModel, "jev-model", envDefault(getenv, "RESUME_JEV_MODEL", "jev-1.13.0"), "hybrid 的 Jev 模型 ID")
-	f.StringVar(&o.report, "report", "template", "hybrid 报告：template / ai；single 自带报告")
-	f.StringVar(&o.cacheDir, "cache-dir", "", "显式启用结构化结果磁盘缓存")
+	f.StringVar(&o.cacheDir, "cache-dir", "", "显式启用 extract 结果磁盘缓存")
 	f.StringVar(&o.stats, "stats", "", "保存耗时及模型用量 JSON")
 	f.DurationVar(&o.timeout, "timeout", 90*time.Second, "完整命令超时")
 	for _, name := range []string{"parse", "extract", "score"} {
@@ -94,14 +90,8 @@ func New(out, errOut io.Writer, getenv func(string) string) *cobra.Command {
 			if o.lang != "zh" && o.lang != "en" {
 				return errors.New("lang must be zh or en")
 			}
-			if o.pipeline == "baseline" {
-				o.pipeline = "single"
-			}
-			if o.pipeline != "hybrid" && o.pipeline != "single" {
-				return errors.New("invalid pipeline")
-			}
-			if o.report != "template" && o.report != "ai" {
-				return errors.New("invalid report mode")
+			if name != "extract" && o.cacheDir != "" {
+				return errors.New("--cache-dir applies only to extract")
 			}
 			if err := checkPaths([]string{args[0], o.jd}, []string{o.output, o.stats}); err != nil {
 				return err
@@ -136,7 +126,7 @@ func New(out, errOut io.Writer, getenv func(string) string) *cobra.Command {
 				if o.stats == "" {
 					return
 				}
-				stats, e := json.MarshalIndent(rec.snapshot(time.Since(start), o.mock, o.pipeline, runErr == nil), "", "  ")
+				stats, e := json.MarshalIndent(rec.snapshot(time.Since(start), o.mock, runErr == nil), "", "  ")
 				if e == nil {
 					e = fileio.Write(o.stats, append(stats, '\n'), o.force)
 				}
@@ -157,13 +147,10 @@ func New(out, errOut io.Writer, getenv func(string) string) *cobra.Command {
 			}
 			if name != "parse" {
 				if o.mock {
-					if o.pipeline == "single" || o.report == "ai" {
-						return errors.New("mock requires hybrid pipeline and template report")
-					}
 					logger.Warn("MOCK: synthetic fixture demonstration; no AI requests")
 					m := ai.Mock{}
 					s.Structurer = m
-					s.Matcher = m
+					s.Evaluator = m
 					s.Identity = "mock-v1"
 				} else {
 					g, err := remote(o, getenv)
@@ -173,26 +160,10 @@ func New(out, errOut io.Writer, getenv func(string) string) *cobra.Command {
 					st := ai.Structurer{Generator: g, Observe: rec.observe}
 					s.Structurer = st
 					s.Identity = g.Identity()
-					if name == "score" {
-						if o.pipeline == "single" {
-							s.Baseline = st
-						} else {
-							base := envDefault(getenv, "TYPESAFE_BASE_URL", "https://api.typesafe.ai/v1")
-							if err = ai.ValidateEndpoint(base); err != nil {
-								return err
-							}
-							key := getenv("TYPESAFE_API_KEY")
-							if key == "" {
-								return errors.New("missing TYPESAFE_API_KEY")
-							}
-							s.Matcher = ai.Jev{Key: key, Model: o.jevModel, BaseURL: base, HTTP: ai.NewTransport(), Observe: rec.observe}
-							if o.report == "ai" {
-								s.Narrator = st
-							}
-						}
-					}
+					s.Evaluator = st
 				}
 			}
+
 			var data []byte
 			switch name {
 			case "parse":

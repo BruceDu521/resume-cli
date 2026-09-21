@@ -4,15 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"resume-cli/internal/domain"
 )
 
 type sequenceGenerator struct {
-	calls  int
-	bodies []string
-	err    error
+	calls    int
+	requests []Request
+	bodies   []string
+	err      error
 }
 
 func TestSourceGroundingRegeneration(t *testing.T) {
@@ -31,6 +33,7 @@ func TestSourceGroundingRegeneration(t *testing.T) {
 func (s *sequenceGenerator) Identity() string { return "sequence" }
 func (s *sequenceGenerator) Generate(_ context.Context, q Request) ([]byte, Usage, error) {
 	s.calls++
+	s.requests = append(s.requests, q)
 	if s.err != nil {
 		return nil, Usage{Stage: q.Stage}, s.err
 	}
@@ -69,5 +72,21 @@ func TestBoundedFormatRegeneration(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+func TestCorrectionIncludesSafeReasonOnly(t *testing.T) {
+	c := domain.Candidate{Resume: domain.Resume{Name: "private-invented-name", Education: []domain.Education{}, Skills: []string{}}, Facts: []domain.Fact{}}
+	bad, _ := json.Marshal(c)
+	c.Resume.Name = "Alice"
+	good, _ := json.Marshal(c)
+	g := &sequenceGenerator{bodies: []string{string(bad), string(good)}}
+	_, err := (Structurer{Generator: g}).Candidate(context.Background(), domain.NewDocument("Alice"))
+	if err != nil || len(g.requests) != 2 {
+		t.Fatal(err)
+	}
+	prompt := g.requests[1].Instruction
+	if !strings.Contains(prompt, "resume.name") || strings.Contains(prompt, "private-invented-name") {
+		t.Fatal("unsafe or missing validation reason")
 	}
 }

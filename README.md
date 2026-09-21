@@ -1,172 +1,88 @@
 # resume-cli
 
-Go PDF 简历分析 CLI：本地提取文本，整理带原文证据的简历和岗位要求，由 Jev 判断匹配情况，再由代码计算分数并生成报告。
+用 Go 编写的 PDF 简历解析与岗位匹配 CLI。PDF 在本地由 Poppler 提取文本；`extract` 和 `score` 各调用一个所选模型，输出经过校验的 JSON。默认中文，支持英文报告。
 
-**已实现三个命令及全部增强功能，支持单模型与 Jev 组合。最新完成 DS/Gemini 四路径 128 次对照及 Kimi Code K3 16 次验证，见 [单模型与组合实测](docs/evaluation-single-vs-hybrid-2026-09-20.md)。调用成功率不等于准确率，提取遗漏与模型判断分歧均有记录。**
+2026-09-21 按用户决定收敛为单模型：移除 Jev、组合模式及第二次报告生成调用。支持 DeepSeek、Gemini、Kimi 和 OpenAI 适配器；OpenAI 尚未实测。历史对照结果保留，不代表当前版本的性能。最新验证见 [单模型与跨行修复实测](docs/evaluation-single-only-2026-09-21.md)。
 
-随后补测真实两页中文简历，发现跨行引用校验及生成评论问题，见 [真实简历验证](docs/evaluation-real-resume-2026-09-20.md)。不同路线均有失败或质量缺口，尚不能声称真实复杂文档已稳定支持。
+## 安装与演示
 
-## 项目简介
-
-| 命令 | 功能 | 模型调用 |
-| --- | --- | --- |
-| `parse <pdf>` | 提取本地 PDF 文本 | 无 |
-| `extract <pdf>` | 姓名、联系方式、城市、教育、技能 | 生成模型 |
-| `score <pdf> --jd <txt>` | 分数、证据、评论、面试问题 | single：一个生成模型；hybrid：生成模型 + Jev |
-
-简历和 JD 的整理阶段并行、可分别缓存。评分区分“未体现”与“明确不符”，来源证据随报告保留。
-
-## 安装与快速开始
-
-需要 Go 1.25.5 或更新版本，以及 Poppler：
+依赖 Go 1.25.5 或更新兼容版本、Poppler（Linux 还需要 poppler-data）。
 
 ```sh
 # macOS
-brew install poppler
-# Debian / Ubuntu（中文字符映射也需要）
+brew install go poppler
+# Debian / Ubuntu
 # sudo apt-get install poppler-utils poppler-data
-
-go mod download
 make build
+bin/resume-cli --help
+
+# 以下命令不需要 API key
 bin/resume-cli parse testdata/resume-zh.pdf
 bin/resume-cli extract testdata/resume-zh.pdf --mock
 bin/resume-cli score testdata/resume-zh.pdf --jd testdata/jd.txt --mock
-bin/resume-cli score testdata/resume-en.pdf --jd testdata/jd-en.txt --mock --lang en
 ```
 
-`--mock` 不需要密钥，没有模型请求；仍真实读取 PDF/JD、校验和评分。仅支持仓库中带演示标记的中英文样例，拒绝对任意简历返回固定的虚假分析。
+mock 只识别随项目提供的中英文合成简历及对应 JD；输出 `mock: true`，不会伪装成对任意真实简历的分析。
 
-容器包含 Poppler、中文字符映射及合成样例，以非 root 用户运行：
+## 配置
 
-```sh
-docker build -t resume-cli:local .
-docker run --rm --network none resume-cli:local parse /examples/resume-zh.pdf
-docker run --rm --network none resume-cli:local extract /examples/resume-en.pdf --mock
-docker run --rm --network none resume-cli:local score /examples/resume-zh.pdf \
-  --jd /examples/jd.txt --mock
-# 输入只读挂载，stdout 保存在宿主机
-docker run --rm --network none -v "$PWD/testdata:/input:ro" resume-cli:local \
-  score /input/resume-zh.pdf --jd /input/jd.txt --mock > result.json
-```
-
-真实模式需允许网络并用 `--env-file .env` 注入密钥。镜像及构建上下文不包含 `.env`、本地需求原文和真实简历。
-
-## 技术选型
-
-| 组件 | 选择及理由 |
-| --- | --- |
-| Go + Cobra | CLI 框架与用例逻辑分离，标准库负责 HTTP / JSON / slog |
-| Poppler | 本地子进程解析，不上传 PDF 文件；是额外运行时依赖 |
-| Gemini 3.8 Flash / DeepSeek V4.1 Flash | 简历与 JD 结构化；DeepSeek 实测更快、更便宜，Gemini 字段遗漏较少 |
-| Jev | 一次批量 Choice 判断要求状态及对应证据 |
-| OpenAI / Kimi | 从同一原始文本独立完成 AI 分析，共用代码评分政策 |
-| 模板 / 可选 AI 报告 | 默认本地中英文模板，减少一次模型调用 |
-| 文件缓存 | 显式开启、简历/JD 分开、24h TTL；不引入数据库 |
-| Makefile + Dockerfile | 本地开发与带 PDF 依赖的交付环境 |
-
-```mermaid
-flowchart LR
-  PDF --> Local[本地文本与编号]
-  Local --> Candidate[简历结构化]
-  JD --> Requirements[要求结构化]
-  Candidate --> Jev[批量判断]
-  Requirements --> Jev
-  Jev --> Score[代码评分]
-  Score --> Report[模板 / AI 报告]
-```
-
-适配器隔离供应商请求、schema、思考参数和用量字段；HTTP、校验和日志复用。小接口围绕实际替换点，不引入 Agent 框架。见 [架构](docs/architecture.md) 与 [开发恢复入口](docs/development.md)。
-
-## 环境变量配置方式
-
-参考 [.env.example](.env.example)。CLI **不会自动加载 `.env`**，通过 shell、运行环境或 Docker 注入；密钥不放在命令行参数中。
-
-本机可复制示例后编辑 key，再在可信的项目目录中加载自己填写的文件：
+复制 `.env.example` 并填入所选供应商的 key。CLI 不自动读取 dotenv；自行通过可信 shell 或运行环境注入。不要将密钥放进命令行参数。
 
 ```sh
 cp -n .env.example .env
 chmod 600 .env
-# 编辑 .env 后，在当前 shell 加载；文件已被 Git 忽略
+# 编辑后加载自己创建的配置
 set -a
 . ./.env
 set +a
 ```
 
-| 变量 | 用途 / 默认值 |
+| 变量 | 作用 |
 | --- | --- |
-| `RESUME_AI_PROVIDER` | `gemini` / `deepseek` / `openai` / `kimi`，无默认值 |
-| `RESUME_AI_PIPELINE` | `single` / `hybrid`，默认 hybrid；`baseline` 为 single 兼容别名 |
-| `RESUME_AI_MODEL` | 可选模型覆盖；跨供应商切换时应取消该变量 |
-| `RESUME_AI_API_KEY` | 所选生成供应商的密钥；切换供应商时同步更换 |
-| `TYPESAFE_API_KEY` | 真实 hybrid 评分的 Jev 密钥 |
-| `RESUME_JEV_MODEL` | 默认 `jev-1.13.0` |
+| `RESUME_AI_PROVIDER` | `deepseek`、`gemini`、`kimi` 或 `openai`；必须明确选择 |
+| `RESUME_AI_API_KEY` | 所选供应商的唯一密钥；更换供应商时同步更换 |
+| `RESUME_AI_MODEL` | 可选模型 ID 覆盖 |
+| `RESUME_AI_BASE_URL` | 可选 HTTPS API 地址覆盖，禁止重定向 |
 | `RESUME_LOG_LEVEL` | debug / info / warn / error，默认 info |
-| `RESUME_AI_BASE_URL` / `TYPESAFE_BASE_URL` | 可选 HTTPS API 地址，默认官方地址 |
 
-模型预设为 `gemini-3.8-flash`、`deepseek-flash`、`gpt-6-astra`、`kimi-k3`。前三条已实测的 API 为 Gemini、DeepSeek 和 Jev；Kimi Code K3 已接通其订阅端点；OpenAI 暂缓，Kimi 开放平台尚无对应 key。parse / mock 不检查 key。`extract` 只用所选生成模型，single 评分也只需该供应商 key；只有 hybrid 评分读取 Jev key。参数覆盖环境变量；key 不支持命令行参数。所有生成供应商统一读取 `RESUME_AI_API_KEY`，不回退读取旧供应商变量。Jev 同时参与 hybrid 流程，因此保留独立的 `TYPESAFE_API_KEY`。
-
-本轮成本优先的评分可试 `--provider deepseek --pipeline hybrid`：32 次中位耗时 2.61 秒，平均估算 $0.000621/次（含 Jev）；单 DeepSeek 为 2.61 秒、$0.000795/次。只配一个 key 可用 single；更完整的质量和速度对照见上面的报告。生成供应商仍无全局默认，`.env.example` 的 DeepSeek 是示例选择。此前结构化提取的遗漏见 [初轮报告](docs/evaluation-results-2026-09-20.md)。
+模型预设为 DeepSeek `deepseek-flash`、Gemini `gemini-3.8-flash`、Kimi 开放平台 `kimi-k3`、OpenAI `gpt-6-astra`。Kimi Code 订阅使用 `k3` 和独立端点，不能混用开放平台 key：
 
 ```sh
-# 已注入对应 key 后
-bin/resume-cli extract resume.pdf --provider deepseek
-bin/resume-cli score resume.pdf --jd jd.txt --provider deepseek --output result.json
-bin/resume-cli score resume.pdf --jd jd.txt --provider gemini --lang en --report ai
-# 独立完整 AI 对照，不需要 Jev key，也不读取 Jev 答案
-bin/resume-cli score resume.pdf --jd jd.txt --provider openai --pipeline baseline
-bin/resume-cli score resume.pdf --jd jd.txt --provider kimi --pipeline baseline
+# 已注入对应供应商的 RESUME_AI_API_KEY
+bin/resume-cli score resume.pdf --jd jd.txt --provider kimi \
+  --model k3 --base-url https://api.kimi.com/coding/v1
 ```
 
-## 选择单模型或组合模式
+不再读取供应商专属 key、`TYPESAFE_*`、`RESUME_AI_PIPELINE` 或 `RESUME_JEV_MODEL`。`--pipeline`、`--jev-model`、`--report` 已删除；旧命令应去掉这些参数。
 
-原题不限定模型数量或凭据传递方式；本工具让两种模式共用 PDF、严格校验、代码评分和输出结构。
+## CLI 命令
 
 ```sh
-# Key 已通过环境变量注入。仅 DeepSeek，不需要 Jev key
-bin/resume-cli score resume.pdf --jd jd.txt --provider deepseek --pipeline single
-# 或通过环境变量选择，命令行参数优先
-export RESUME_AI_PROVIDER=gemini
-export RESUME_AI_PIPELINE=single
-export RESUME_AI_MODEL=gemini-3.8-flash
-bin/resume-cli score resume.pdf --jd jd.txt
-# 组合模式需要所选供应商和 Jev 两个 key
-bin/resume-cli score resume.pdf --jd jd.txt --provider deepseek --model deepseek-flash --pipeline hybrid
-# Kimi Code 订阅使用其专用接口和模型 ID；不能混用开放平台 key
-bin/resume-cli score resume.pdf --jd jd.txt --provider kimi --model k3 \
-  --base-url https://api.kimi.com/coding/v1 --pipeline single
+bin/resume-cli parse resume.pdf --output resume.txt
+bin/resume-cli extract resume.pdf --provider deepseek --output resume.json
+bin/resume-cli score resume.pdf --jd jd.txt --provider gemini \
+  --output result.json --stats usage.json
+bin/resume-cli score resume.pdf --jd jd.txt --provider deepseek --lang en
 ```
-
-single 一次生成事实、要求、逐项状态和评论/问题，随后来源验证与代码算分；校验不通过最多再生成一次。它不依赖 Jev，不使用结构化缓存。hybrid 并行整理简历/JD、调用 Jev、默认模板报告，支持结构化缓存和可选 AI 报告。少一个模型不必然更快：一次生成的内容量、推理配置和报告方式也影响费用及延迟。
-
-Kimi Code 与开放平台分别计费，订阅额度不能换算成确定的每请求费用；stats 保留 tokens，美元费用标为未知。开放平台 K3 的估算尚未包含额外缓存写入费用，明确标记 cost_complete=false。
-
-## CLI 命令说明
-
-三个命令支持 `--help`。结果写 stdout，日志和错误写 stderr；成功退出码 0，失败为非 0。
 
 | 参数 | 行为 |
 | --- | --- |
-| `--output <path>` | 保存文本或 JSON，不重复写 stdout |
-| `--force` | 允许替换已有输出，禁止覆盖输入或其别名 |
-| `--mock` | 合成演示；不能与 single / AI 报告组合 |
-| `--lang zh\|en` | 默认 zh；只控制评论和问题，事实、引用不翻译 |
-| `--provider` / `--model` / `--base-url` | 覆盖相应环境变量 |
-| `--jev-model` | 覆盖 RESUME_JEV_MODEL，仅 hybrid 使用 |
-| `--pipeline single\|hybrid` | score 路径，默认 hybrid；覆盖 RESUME_AI_PIPELINE，baseline 为 single 别名 |
-| `--report template\|ai` | hybrid 报告，默认 template；single 自带报告 |
-| `--cache-dir <dir>` | 显式启用结构化缓存，默认关闭 |
-| `--stats <path>` | 保存成功或失败的耗时、调用、用量、缓存命中 |
-| `--timeout <duration>` | 默认 90s，大于 0 且不超过 10m |
+| `--output <path>` | 保存结果；parse 为文本，其他为 JSON |
+| `--force` | 允许替换输出，禁止覆盖输入或输出别名 |
+| `--mock` | 合成样例离线演示 |
+| `--lang zh\|en` | 默认 zh；切换评论、面试问题语言，来源不翻译 |
+| `--provider` / `--model` / `--base-url` | 覆盖对应环境变量 |
+| `--cache-dir <dir>` | 仅 extract 使用的可选私有缓存，24 小时有效 |
+| `--stats <path>` | 保存成功及失败调用的耗时、token 和估算费用 |
+| `--timeout <duration>` | 完整命令默认 90s，最多 10m |
 
-输出与 stats 路径须不同，默认不覆盖已有文件；新文件权限 0600，父目录须已存在。参数、已有输出和日志配置等前置校验失败不生成 stats。字段名固定英文 snake_case，缺失事实为 `""` / `[]`。
+输出文件权限 0600，默认不可覆盖。stdout 只有结果，日志走 stderr；不记录 key、完整简历或模型原始响应。
 
-语言不改变评分政策；两次真实调用可能因模型随机性而有差异，重新请求不保证同一分数。
+## 示例输入与输出
 
-## 示例输入和输出
+输入见 `testdata/resume-zh.pdf`、`testdata/jd.txt`；示例人物和联系方式均为合成。`extract` 输出姓名、电话、邮箱、城市、education 和 skills；缺失内容为 `""` / `[]`，不填造事实。
 
-合成样例覆盖中文、英文、多栏、空文本和多段教育/重叠任期。演示人物为“林予安 / Lin Yuan”，包含 Go/PostgreSQL 开发、Kubernetes 部署、本科，以及未承担生产故障处理的说明。
-
-实际生成的离线结果：[中文 extract](examples/extract-zh.mock.json)、[中文 score](examples/score-zh.mock.json)、[英文 score](examples/score-en.mock.json)。演示评分主字段如下：
+[中文 extract 示例](examples/extract-zh.mock.json)、[中文 score 示例](examples/score-zh.mock.json)、[英文 score 示例](examples/score-en.mock.json)。mock 评分主字段如下：
 
 ```json
 {
@@ -177,76 +93,52 @@ Kimi Code 与开放平台分别计费，订阅额度不能换算成确定的每�
 }
 ```
 
-单模型实际输出：[DeepSeek single 中文 score](examples/score-zh.deepseek-single.json)。
+完整结果还包含 comment、interview_questions、findings（逐项要求、状态与原文证据）、not_required、policy_version、language 和 mock。上述分数是固定演示，不能视为实际模型评测结果。
 
-真实合成样例：[DeepSeek 中文 extract](examples/extract-zh.deepseek.json)、[DeepSeek + Jev 中文 score](examples/score-zh.deepseek-jev.json)、[Gemini + Jev 英文 score](examples/score-en.gemini-jev.json)。真实评分样例为 65 分，生产运维项按明确否定记 0；mock 中的部分匹配是固定演示，不作为模型真值。
+## 技术选择与流程
 
-完整结果还有 comment、interview_questions、逐条 findings 与证据、not_required、policy_version、language、mock。**上面的 83 分片段是 mock 结果，不是模型质量实测。**
+Go + Cobra 负责 CLI、文件边界、HTTP、取消和 JSON 校验；Poppler 负责本地 PDF 文本提取。无 Agent 框架、数据库或服务端依赖。
 
-## 评分与可靠性
+- `parse`：只在本机读取 PDF，不调用 AI。
+- `extract`：模型提取公开字段和带来源的证据，校验后输出公开字段。
+- `score`：一次模型请求完成简历/JD 整理、逐项判断、评论及面试问题；本地核验来源和引用，再统一算分。结构或来源校验失败时最多从原输入纠正一次。
+- 来源块保留 PDF 行号。事实用 `block_id` 和 `end_block_id` 指定最多 16 个连续块；单行可省略或留空 end_block_id。引文必须是该范围的连续原文，允许空白差异，不能跳行或改写。输出保留完整范围上下文。
 
-策略 `evidence-v1`：满足 100、部分满足 50、明确不符 0、未体现 0。后两类报告分开表达，confidence 不转换为候选人能力分。技能/经历/教育权重 50%/35%/15%，同维度必需项权重 2、优先项 1。
+权重是本项目明确制定的匹配政策，非题目指定：满足=100、部分满足=50、明确不符=0、未体现=0；必需项权重 2，优先项 1；技能/经历/教育权重 50%/35%/15%。未要求的维度从总分分母移除，并标记 not_required；该维度数字 100 是兼容占位，不代表实际能力满分。
 
-- 未要求的维度不计总分；为兼容固定结构保留数字 100，并在 not_required 中标明，不能解释成能力满分。
-- 事实与引用须能在来源中找到；证据恢复为完整来源行以保留否定和责任边界，遗漏的已提取技能/教育证据可从原文补齐。该步骤不会自动补齐遗漏的公开字段。
-- 空证据集合拒绝评分；Jev 判断与所选证据冲突时，改为未体现、0 分并显示需复核标记，不能静默给分。原文存在某句话，并不等于它属于有效履历事实。
-- JSON 修复：完整代码围栏、BOM、字符串外的尾逗号。拒绝重复键、未知/缺失字段、null、错误类型、超深 JSON、截断和拼接结果，不补造内容。
-- 调用可取消、有超时；仅 429/529/502/503/504 有界重试，最多 3 次。鉴权不重试；JSON/schema 或 Candidate/Job 来源校验失败时，任务层最多从原始输入重新生成一次，单独记录成本。禁用 HTTP 重定向。
-- stats 保存已知用量；Gemini 可计费思考 token 计入输出。费用未知不假称零，重试造成费用不完整时 cost_complete=false。
-- 估算价格日期 2026-09-20，不是账单；DeepSeek 使用保守高峰价、Kimi 使用国际美元价，自定义模型/端点需另行核对。
-- 缓存含证据，默认关闭；文件 0600、新目录 0700、24h TTL，只存成功结构化数据，评分和报告每次重算。
+单模型、一次请求并不保证每次结果相同；模型判断、引用选择和自由文本仍需质量验证。详细设计见 [架构文档](docs/architecture.md)。
 
-上限：PDF 20 MiB、提取文本 160 KiB、JD 64 KiB、模型响应 2 MiB、64 条事实、24 条要求。Jev 另设保守上下文字节限制，超限报错而非截断。不含 OCR；复杂版式阅读顺序不保证完全正确。
+## 测试、评测与 Docker
 
-## 测试与模型评测
-
-先下载构建依赖，测试使用 `GOPROXY=off`。HTTP 测试用内存替身，不发送实际请求，也不启动 localhost 服务；PDF 用例只运行本地 Poppler，缺少依赖时明确跳过。
+当前离线 Go 单测/race/vet 通过，总覆盖87.7%。Go 单元测试使用内存 HTTP 替身，AI/CLI 测试默认禁止真实网络；测试不读取 `.env`。离线验证覆盖来源范围、否定语境、JSON 修复、评分、重试、取消、缓存及输出防覆盖。
 
 ```sh
-make test
-make race
-make vet
-# 或一次运行以上三项
 make check
-```
-
-2026-09-20：全部 Go 测试、竞态检查及 vet 通过。总体语句覆盖率 **88.4%**，领域规则 **96.1%**，AI 适配器 **90.8%**。Docker 禁网验证三个命令通过。覆盖率不代表真实模型正确率。
-
-JSON 修复器另外运行约 10 秒 fuzz，执行 478,049 次输入，无失败。
-
-```sh
-# 默认仅列计划，不调用模型
+python3 -m unittest discover -s scripts -p 'test_*.py'
+# 默认只列计划，不读取 key 或联网
 python3 scripts/evaluate.py
-# 只检查离线评测链路
-python3 scripts/evaluate.py --routes mock --repeats 1 --execute --out .local/eval-smoke-new
-# 按评测文档配置私有 provider profiles，并通过环境注入 Jev key
-python3 scripts/evaluate.py --routes gemini deepseek --limit 2 --repeats 1 \
-  --env-dir .local/provider-env --execute --out .local/eval-api-smoke
-# 单模型与组合，四条路径，打乱顺序
-python3 scripts/evaluate.py --routes deepseek_single gemini_single deepseek gemini \
-  --env-dir .local/provider-env --repeats 2 --execute --out .local/eval-comparison
-# Kimi Code 订阅，明确使用 k3；另外单独运行
-python3 scripts/evaluate.py --routes kimi_code --env-dir .local/provider-env --repeats 1 --execute --out .local/eval-k3
+# 离线演示评测
+python3 scripts/evaluate.py --routes mock --repeats 1 --execute --out .local/eval-new
+# 明确准备各供应商私有配置后才执行真实 API
+python3 scripts/evaluate.py --routes gemini deepseek --env-dir .local/provider-env \
+  --limit 2 --repeats 1 --execute --out .local/eval-live-new
+
+docker build -t resume-cli .
+docker run --rm --network none resume-cli score /examples/resume-zh.pdf \
+  --jd /examples/jd.txt --mock
 ```
 
-12 个开发案例和 4 个补充回归案例；后者曾用于发现问题并调整提示词，最终已不算独立保留集。保存每次结果、stats、错误日志、检查表和汇总。统计包含失败，质量按原文检查，不能仅依赖脚本。Gemini / DeepSeek 比较质量与速度，接近时优先便宜的 DeepSeek；OpenAI / Kimi 为独立完整对照。见 [评测协议](docs/evaluation.md)。
+真实模型测试与单测分开，费用只是按已观察 token 的估算；未知费用不写成零。Kimi Code 为订阅配额，不能冒充按 token 美元账单。多供应商配置方法及检查规则见 [评测协议](docs/evaluation.md)。
 
-## 已实现功能
+## 已实现功能与限制
 
-- 三个命令，默认中文和英文切换。
-- 五项增强：文件输出、mock、JSON 修复、日志、Makefile / Dockerfile。
-- 证据校验、确定性评分、可选 AI 报告、独立基线。
-- 缓存、取消与重试、用量及估算成本。
-- 文件、JSON、HTTP、评分、取消、并发和命令端到端测试。
+已实现三个命令、中英文、文件输出、mock、有限 JSON 修复、日志、Makefile 与 Dockerfile。JSON 修复仅处理完整代码围栏、BOM、字符串外尾逗号；不修造业务事实。拒绝重复键、null、未知字段、无效引用以及过量输入。
 
-## 已知问题与未完成内容
+- PDF 上限 20 MiB、文本 160 KiB、JD 64 KiB；扫描件需要 OCR，当前不支持；不解锁加密 PDF。
+- 跨行来源支持连续范围，不自动理解所有多栏顺序、跨页页眉或扫描版面。每条事实最多 16 行，最多 64 条事实、24 项要求。
+- 来源校验可以拒绝不存在的引用，不能证明技能提取完整、引用充分或生成评论语义准确。
+- 没有确定性任期合并、精确技能年限推导或批量招聘服务。不得把总工龄当技能年限。
+- 合成回归集不是独立人工标注准确率；真实复杂文档仅有限测试，不声称生产稳定性。未测试 OpenAI、Windows 或高并发。
+- 尚未发布公开仓库或演示视频。原题、真实简历、密钥及中间结果均排除 Git。
 
-- 真实长文的跨行引用可能被当前单行 Block 校验拒绝；成功引用也可能只显示半句。生成评论可能把 unknown 写成缺乏能力，详见真实简历报告；这些缺口尚未修复。
-- Gemini/DeepSeek/Jev 与 Kimi Code K3 已接通；OpenAI 暂缓，Kimi 开放平台缺对应 key；生成模型仍需显式选择。
-- 两家生成模型均出现公开 skills 数组为空但 facts 保留技能证据的情况；DeepSeek 另有两次要求分类差异。来源校验能拒绝虚构引用，无法证明提取完整。
-- 合成集较小，尚无独立保留测试集，不能据此声称生产准确率。多栏 PDF 只有基础解析用例。
-- 不做 OCR、加密文件解锁、数据库和批处理服务。
-- 未实现精确任职区间合并与技能年限计算；提示词禁止重叠任期相加或把总工龄等同技能年限，本轮重叠任期样例未发生重复累加，但不代表任意履历均可靠。
-- 未验证 Windows，尚未完成公开仓库与演示视频。
-
-原题、会话、真实输入和评测中间数据位于 Git 忽略目录，公开例子均为合成数据。第三方说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+历史报告：[早期组合评测](docs/evaluation-results-2026-09-20.md)、[单模型与组合比较](docs/evaluation-single-vs-hybrid-2026-09-20.md)、[跨行修复前的真实简历测试](docs/evaluation-real-resume-2026-09-20.md)。这些记录保留失败，不能与新版本测量混算。第三方信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

@@ -65,7 +65,7 @@ func TestFilesAndCache(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.json")
 	stats := filepath.Join(dir, "stats.json")
-	args := []string{"score", "../../testdata/resume-en.pdf", "--jd", "../../testdata/jd-en.txt", "--mock", "--output", out, "--stats", stats, "--cache-dir", filepath.Join(dir, "cache")}
+	args := []string{"extract", "../../testdata/resume-en.pdf", "--mock", "--output", out, "--stats", stats, "--cache-dir", filepath.Join(dir, "cache")}
 	stdout, _, e := run(args...)
 	if e != nil || stdout != "" {
 		t.Fatal(stdout, e)
@@ -153,29 +153,24 @@ func TestFailureStats(t *testing.T) {
 }
 
 func TestSingleModelNeedsOnlySelectedKey(t *testing.T) {
-	for _, mode := range []string{"single", "baseline"} {
-		for _, provider := range []string{"deepseek", "gemini", "kimi", "openai"} {
-			var out, logs bytes.Buffer
-			cmd := New(&out, &logs, func(k string) string {
-				if k == "RESUME_AI_PROVIDER" {
-					return provider
-				}
-				if k == "RESUME_AI_PIPELINE" {
-					return mode
-				}
-				if k == "RESUME_AI_API_KEY" {
-					return "synthetic"
-				}
-				if k == "TYPESAFE_BASE_URL" {
-					return "invalid-and-unused"
-				}
-				return ""
-			})
-			cmd.SetArgs([]string{"score", filepath.Join(t.TempDir(), "missing.pdf"), "--jd", "../../testdata/jd.txt"})
-			err := cmd.Execute()
-			if err == nil || strings.Contains(err.Error(), "API_KEY") || strings.Contains(err.Error(), "endpoint") || !strings.Contains(err.Error(), "cannot read input") {
-				t.Fatalf("%s/%s should reach local PDF parsing without Jev: %v", provider, mode, err)
+	for _, provider := range []string{"deepseek", "gemini", "kimi", "openai"} {
+		var out, logs bytes.Buffer
+		cmd := New(&out, &logs, func(k string) string {
+			if strings.HasPrefix(k, "TYPESAFE_") || k == "RESUME_AI_PIPELINE" || k == "RESUME_JEV_MODEL" {
+				t.Fatalf("removed configuration read: %s", k)
 			}
+			if k == "RESUME_AI_PROVIDER" {
+				return provider
+			}
+			if k == "RESUME_AI_API_KEY" {
+				return "synthetic"
+			}
+			return ""
+		})
+		cmd.SetArgs([]string{"score", filepath.Join(t.TempDir(), "missing.pdf"), "--jd", "../../testdata/jd.txt"})
+		err := cmd.Execute()
+		if err == nil || !strings.Contains(err.Error(), "cannot read input") {
+			t.Fatalf("%s: %v", provider, err)
 		}
 	}
 }
@@ -183,12 +178,12 @@ func TestSingleModelNeedsOnlySelectedKey(t *testing.T) {
 func TestFlagOverridesEnvironment(t *testing.T) {
 	var out bytes.Buffer
 	cmd := New(&out, &out, func(k string) string {
-		return map[string]string{"RESUME_AI_PROVIDER": "kimi", "RESUME_AI_MODEL": "env-model", "RESUME_AI_PIPELINE": "hybrid", "RESUME_AI_BASE_URL": "https://env.invalid", "RESUME_JEV_MODEL": "env-jev"}[k]
+		return map[string]string{"RESUME_AI_PROVIDER": "kimi", "RESUME_AI_MODEL": "env-model", "RESUME_AI_BASE_URL": "https://env.invalid"}[k]
 	})
-	if err := cmd.ParseFlags([]string{"--provider", "deepseek", "--model", "flag-model", "--pipeline", "single", "--base-url", "https://flag.invalid", "--jev-model", "flag-jev"}); err != nil {
+	if err := cmd.ParseFlags([]string{"--provider", "deepseek", "--model", "flag-model", "--base-url", "https://flag.invalid"}); err != nil {
 		t.Fatal(err)
 	}
-	for name, want := range map[string]string{"provider": "deepseek", "model": "flag-model", "pipeline": "single", "base-url": "https://flag.invalid", "jev-model": "flag-jev"} {
+	for name, want := range map[string]string{"provider": "deepseek", "model": "flag-model", "base-url": "https://flag.invalid"} {
 		got, err := cmd.PersistentFlags().GetString(name)
 		if err != nil || got != want {
 			t.Fatal(name, got, err)

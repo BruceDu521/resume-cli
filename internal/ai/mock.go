@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"resume-cli/internal/domain"
+	"resume-cli/internal/report"
 )
 
 // Mock supports only the documented synthetic fixtures; it never pretends to
@@ -73,4 +74,25 @@ func (Mock) Match(ctx context.Context, c domain.Candidate, j domain.Job) ([]doma
 		out = append(out, domain.Judgment{RequirementID: r.ID, Status: s, Score: score, EvidenceID: r.ID, Confidence: 1})
 	}
 	return out, nil
+}
+
+func (m Mock) Evaluate(ctx context.Context, d domain.Document, jd, lang string) (domain.Candidate, domain.Job, []domain.Judgment, string, []string, error) {
+	c, e := m.Candidate(ctx, d)
+	if e != nil {
+		return c, domain.Job{}, nil, "", nil, e
+	}
+	j, e := m.Job(ctx, jd)
+	if e != nil {
+		return c, j, nil, "", nil, e
+	}
+	v, e := m.Match(ctx, c, j)
+	if e != nil {
+		return c, j, v, "", nil, e
+	}
+	a, e := domain.Aggregate(c, j, v)
+	if e != nil {
+		return c, j, v, "", nil, e
+	}
+	r := report.Render(a, lang, true)
+	return c, j, v, r.Comment, r.Questions, nil
 }

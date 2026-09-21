@@ -13,15 +13,12 @@ from evaluation_credentials import load_credentials
 
 ROOT = Path(__file__).resolve().parents[1]
 PATHS = {
-    "gemini": ("gemini", "hybrid", "gemini-3.8-flash"),
-    "deepseek": ("deepseek", "hybrid", "deepseek-flash"),
-    "gemini_single": ("gemini", "single", "gemini-3.8-flash"),
-    "deepseek_single": ("deepseek", "single", "deepseek-flash"),
-    "kimi_hybrid": ("kimi", "hybrid", "kimi-k3"),
-    "kimi_code": ("kimi", "single", "k3"),
-    "openai": ("openai", "single", "gpt-6-astra"),
-    "kimi": ("kimi", "single", "kimi-k3"),
-    "mock": ("", "hybrid", ""),
+    "gemini": ("gemini", "gemini-3.8-flash"),
+    "deepseek": ("deepseek", "deepseek-flash"),
+    "kimi_code": ("kimi", "k3"),
+    "openai": ("openai", "gpt-6-astra"),
+    "kimi": ("kimi", "kimi-k3"),
+    "mock": ("", ""),
 }
 
 
@@ -56,14 +53,13 @@ def summarize(rows):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--execute", action="store_true", help="actually run the CLI; real routes incur API calls")
-    p.add_argument("--routes", nargs="+", choices=PATHS, default=["gemini", "deepseek", "openai", "kimi"])
+    p.add_argument("--routes", nargs="+", choices=PATHS, default=["gemini", "deepseek"])
     p.add_argument("--repeats", type=int, default=3)
     p.add_argument("--seed", type=int, default=20260920)
     p.add_argument("--limit", type=int, help="use only the first N cases for a smoke test")
     p.add_argument("--binary", type=Path, default=ROOT / "bin/resume-cli")
     p.add_argument("--suite", type=Path, default=ROOT / "testdata/evaluation/cases.json", help="case manifest; use a separate suite for held-out validation")
     p.add_argument("--kimi-base-url", choices=["https://api.moonshot.ai/v1", "https://api.moonshot.cn/v1"], default="https://api.moonshot.ai/v1", help="explicit official Kimi account region")
-    p.add_argument("--capture-structures", action="store_true", help="save validated structures in a fresh private cache per trial; never reuse across trials")
     p.add_argument("--env-dir", type=Path, help="explicit private directory containing <provider>.env, each with RESUME_AI_API_KEY; never auto-loads project .env")
     p.add_argument("--out", type=Path, help="new private output directory; required with --execute")
     args = p.parse_args()
@@ -83,11 +79,11 @@ def main():
     for source in sources:
         digest.update(str(source.relative_to(ROOT)).encode() + b"\0" + source.read_bytes())
     plan = {
-        "seed": args.seed, "cache": "fresh per trial" if args.capture_structures else "disabled", "code_sha256": digest.hexdigest(),
+        "seed": args.seed, "cache": "disabled", "code_sha256": digest.hexdigest(),
         "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "binary_sha256": hashlib.sha256(args.binary.read_bytes()).hexdigest() if args.binary.is_file() else None,
         "manifest_sha256": hashlib.sha256(args.suite.read_bytes()).hexdigest(),
-        "models": {r: PATHS[r] for r in args.routes}, "jev": "jev-1.13.0",
+        "models": {r: PATHS[r] for r in args.routes},
         "kimi_base_url": args.kimi_base_url, "kimi_code_base_url": "https://api.kimi.com/coding/v1", "kimi_reasoning_effort": "low",
         "inputs": {c["id"]: {"pdf_sha256": hashlib.sha256((ROOT / c["pdf"]).read_bytes()).hexdigest(),
                               "jd_sha256": hashlib.sha256((ROOT / c["jd"]).read_bytes() if "jd" in c else c["jd_text"].encode()).hexdigest()} for c in cases},
@@ -111,9 +107,8 @@ def main():
     write_json(args.out / "plan.json", plan)
     env = os.environ.copy()
     # Pin the benchmark routes. Do not silently inherit custom proxy/model settings.
-    for key in ("RESUME_AI_API_KEY", "RESUME_AI_PIPELINE", "RESUME_AI_PROVIDER", "RESUME_AI_MODEL", "RESUME_AI_BASE_URL", "TYPESAFE_BASE_URL", "RESUME_JEV_MODEL"):
+    for key in ("RESUME_AI_API_KEY", "RESUME_AI_PROVIDER", "RESUME_AI_MODEL", "RESUME_AI_BASE_URL", "TYPESAFE_API_KEY"):
         env.pop(key, None)
-    env["RESUME_JEV_MODEL"] = "jev-1.13.0"
     rows = []
     for case, route, repeat in jobs:
         dest = args.out / f"{case['id']}-{route}-{repeat}"
@@ -123,17 +118,13 @@ def main():
             jd.write_text(case["jd_text"], encoding="utf-8")
         cmd = [str(binary), "score", str(ROOT / case["pdf"]), "--jd", str(jd), "--lang", case["lang"],
                "--timeout", "180s", "--output", str(dest / "result.json"), "--stats", str(dest / "stats.json")]
-        provider, pipeline, model = PATHS[route]
+        provider, model = PATHS[route]
         trial_env = env.copy()
         if provider:
             trial_env["RESUME_AI_API_KEY"] = credentials[provider]
-        if pipeline == "single" or route == "mock":
-            trial_env.pop("TYPESAFE_API_KEY", None)
-        cmd += ["--mock"] if route == "mock" else ["--provider", provider, "--pipeline", pipeline, "--model", model]
+        cmd += ["--mock"] if route == "mock" else ["--provider", provider, "--model", model]
         if provider == "kimi":
             cmd += ["--base-url", "https://api.kimi.com/coding/v1" if route == "kimi_code" else args.kimi_base_url]
-        if args.capture_structures and pipeline == "hybrid":
-            cmd += ["--cache-dir", str(dest / "structures")]
         start = time.monotonic()
         with (dest / "stderr.log").open("wb") as log:
             try:

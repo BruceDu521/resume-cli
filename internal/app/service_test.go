@@ -3,11 +3,9 @@ package app
 import (
 	"context"
 	"errors"
-	"sync/atomic"
-	"testing"
-
 	"resume-cli/internal/cache"
 	"resume-cli/internal/domain"
+	"testing"
 )
 
 type parser struct {
@@ -17,125 +15,80 @@ type parser struct {
 
 func (p parser) Parse(context.Context, string) (domain.Document, error) { return p.d, p.err }
 
-type structure struct {
-	candidate atomic.Int32
-	job       atomic.Int32
+type model struct {
+	calls     int
 	err       error
+	empty     bool
+	badReport bool
 }
 
-func (s *structure) Candidate(ctx context.Context, d domain.Document) (domain.Candidate, error) {
-	s.candidate.Add(1)
-	if s.err != nil {
-		return domain.Candidate{}, s.err
+func (m *model) Candidate(ctx context.Context, d domain.Document) (domain.Candidate, error) {
+	m.calls++
+	if ctx.Err() != nil {
+		return domain.Candidate{}, ctx.Err()
 	}
-	return domain.Candidate{Resume: domain.Resume{Name: "Alice", Education: []domain.Education{}, Skills: []string{"Go"}}, Facts: []domain.Fact{{ID: "f1", Category: "skill", BlockID: "b2", Quote: "Go"}}}, nil
+	if m.err != nil {
+		return domain.Candidate{}, m.err
+	}
+	c := domain.Candidate{Resume: domain.Resume{Name: "Alice", Education: []domain.Education{}, Skills: []string{"Go"}}, Facts: []domain.Fact{{ID: "f", Category: "skill", BlockID: "b2", Quote: "Go"}}}
+	if m.empty {
+		c.Facts = []domain.Fact{}
+	}
+	return c, nil
 }
-func (s *structure) Job(context.Context, string) (domain.Job, error) {
-	s.job.Add(1)
-	return domain.Job{Requirements: []domain.Requirement{{ID: "r1", Category: "skill", Text: "Go", Required: true}}}, nil
+func (m *model) Evaluate(ctx context.Context, d domain.Document, jd, lang string) (domain.Candidate, domain.Job, []domain.Judgment, string, []string, error) {
+	c, e := m.Candidate(ctx, d)
+	j := domain.Job{Requirements: []domain.Requirement{{ID: "r", Category: "skill", Text: "Go", Required: true}}}
+	v := []domain.Judgment{{RequirementID: "r", Status: "satisfied", Score: 100, EvidenceID: "f", Confidence: 1}}
+	comment := "Evidence supports Go"
+	if m.badReport {
+		comment = ""
+	}
+	return c, j, v, comment, []string{"Describe your work?"}, e
 }
-
-type matcher struct{}
-
-func (matcher) Match(context.Context, domain.Candidate, domain.Job) ([]domain.Judgment, error) {
-	return []domain.Judgment{{RequirementID: "r1", Status: "satisfied", Score: 100, EvidenceID: "f1", Confidence: 1}}, nil
-}
-func TestReuseAcrossCommands(t *testing.T) {
-	st := &structure{}
-	s := Service{Parser: parser{d: domain.NewDocument("Alice\nGo")}, Structurer: st, Matcher: matcher{}, Cache: cache.Store{Dir: t.TempDir()}, Identity: "synthetic"}
-	if _, e := s.Extract(context.Background(), "any"); e != nil {
-		t.Fatal(e)
+func TestExtractCacheAndIndependentScore(t *testing.T) {
+	m := &model{}
+	s := Service{Parser: parser{d: domain.NewDocument("Alice\nGo")}, Structurer: m, Evaluator: m, Cache: cache.Store{Dir: t.TempDir()}, Identity: "synthetic"}
+	for range 2 {
+		if _, err := s.Extract(context.Background(), "any"); err != nil {
+			t.Fatal(err)
+		}
 	}
-	r, e := s.Score(context.Background(), "any", "Go", "zh")
-	if e != nil || r.Overall != 100 {
-		t.Fatal(r, e)
+	if m.calls != 1 {
+		t.Fatal("extract cache missed")
 	}
-	r, e = s.Score(context.Background(), "any", "Go", "en")
-	if e != nil || r.Language != "en" {
-		t.Fatal(e)
+	for _, lang := range []string{"zh", "en"} {
+		r, err := s.Score(context.Background(), "any", "Go", lang)
+		if err != nil || r.Overall != 100 || r.Language != lang || r.Comment != "Evidence supports Go" {
+			t.Fatal(r, err)
+		}
 	}
-	if st.candidate.Load() != 1 || st.job.Load() != 1 {
-		t.Fatal("did not reuse", st.candidate.Load(), st.job.Load())
+	if m.calls != 3 {
+		t.Fatal("score must run its complete analysis independently")
 	}
 }
 func TestErrors(t *testing.T) {
+	for _, m := range []*model{{err: errors.New("model failed")}, {empty: true}, {badReport: true}} {
+		s := Service{Parser: parser{d: domain.NewDocument("Alice\nGo")}, Evaluator: m}
+		if _, e := s.Score(context.Background(), "any", "Go", "zh"); e == nil {
+			t.Fatal("invalid result accepted")
+		}
+	}
 	s := Service{Parser: parser{err: errors.New("parse failed")}}
-	if _, e := s.Extract(context.Background(), "x"); e == nil {
+	if _, e := s.Extract(context.Background(), "any"); e == nil {
 		t.Fatal("parser failure")
 	}
-	if _, e := s.Score(context.Background(), "x", "Go", "xx"); e == nil {
-		t.Fatal("lang")
+	if _, e := s.Score(context.Background(), "any", "Go", "zh"); e == nil {
+		t.Fatal("parser failure")
 	}
-	s.Parser = parser{d: domain.NewDocument("Alice\nGo")}
-	s.Structurer = &structure{err: errors.New("extraction failed")}
-	s.Matcher = matcher{}
-	if _, e := s.Score(context.Background(), "x", "Go", "zh"); e == nil {
-		t.Fatal("extract error")
+	if _, e := s.Score(context.Background(), "any", "Go", "xx"); e == nil {
+		t.Fatal("language failure")
 	}
+	m := &model{}
+	s = Service{Parser: parser{d: domain.NewDocument("Alice\nGo")}, Evaluator: m}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, e := s.Score(ctx, "x", "Go", "zh"); e == nil {
-		t.Fatal("cancel")
-	}
-}
-
-type baseline struct{}
-
-func (baseline) Evaluate(ctx context.Context, d domain.Document, jd, lang string) (domain.Candidate, domain.Job, []domain.Judgment, string, []string, error) {
-	st := &structure{}
-	c, _ := st.Candidate(ctx, d)
-	j, _ := st.Job(ctx, jd)
-	v, _ := (matcher{}).Match(ctx, c, j)
-	return c, j, v, "Independent baseline", []string{"Question?"}, nil
-}
-func TestIndependentBaseline(t *testing.T) {
-	s := Service{Parser: parser{d: domain.NewDocument("Alice\nGo")}, Baseline: baseline{}}
-	r, e := s.Score(context.Background(), "any", "Go", "en")
-	if e != nil || r.Comment != "Independent baseline" || r.Overall != 100 {
-		t.Fatal(r, e)
-	}
-}
-
-type cancelStructure struct {
-	started  chan struct{}
-	finished chan struct{}
-}
-
-func (s cancelStructure) Candidate(ctx context.Context, _ domain.Document) (domain.Candidate, error) {
-	<-s.started
-	return domain.Candidate{}, errors.New("candidate failed")
-}
-func (s cancelStructure) Job(ctx context.Context, _ string) (domain.Job, error) {
-	close(s.started)
-	<-ctx.Done()
-	close(s.finished)
-	return domain.Job{}, ctx.Err()
-}
-func TestFailureCancelsAndJoinsWorkers(t *testing.T) {
-	st := cancelStructure{make(chan struct{}), make(chan struct{})}
-	s := Service{Parser: parser{d: domain.NewDocument("Alice")}, Structurer: st}
-	_, err := s.Score(context.Background(), "any", "Go", "zh")
-	if err == nil || err.Error() != "candidate failed" {
-		t.Fatal(err)
-	}
-	select {
-	case <-st.finished:
-	default:
-		t.Fatal("request worker outlived the command")
-	}
-}
-
-type emptyStructure struct{}
-
-func (emptyStructure) Candidate(context.Context, domain.Document) (domain.Candidate, error) {
-	return domain.Candidate{Resume: domain.Resume{Name: "Alice", Education: []domain.Education{}, Skills: []string{}}, Facts: []domain.Fact{}}, nil
-}
-func (emptyStructure) Job(context.Context, string) (domain.Job, error) {
-	return domain.Job{Requirements: []domain.Requirement{{ID: "r", Category: "skill", Text: "Go", Required: true}}}, nil
-}
-func TestEmptyExtractionMustNotBecomeZeroScore(t *testing.T) {
-	s := Service{Parser: parser{d: domain.NewDocument("Alice\nGo development")}, Structurer: emptyStructure{}}
-	if _, err := s.Score(context.Background(), "any", "Go", "zh"); err == nil {
-		t.Fatal("empty extraction scored")
+	if _, e := s.Score(ctx, "any", "Go", "zh"); !errors.Is(e, context.Canceled) {
+		t.Fatal(e)
 	}
 }

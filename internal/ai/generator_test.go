@@ -38,7 +38,7 @@ func TestProviderContracts(t *testing.T) {
 				}
 				return response(200, `{"model":"model","choices":[{"finish_reason":"stop","message":{"content":"{}"}}],"usage":{"prompt_tokens":100,"completion_tokens":20,"prompt_tokens_details":{"cached_tokens":5}}}`), nil
 			})}}
-			b, u, e := r.Generate(context.Background(), Request{Stage: "candidate", Instruction: "rules", State: map[string]string{"x": "y"}, Schema: object(map[string]any{})})
+			b, u, e := r.Generate(context.Background(), Request{Stage: "extract", Instruction: "rules", State: map[string]string{"x": "y"}, Schema: object(map[string]any{})})
 			if e != nil || string(b) != "{}" || !u.Known || u.Input != 100 || u.Cached != 5 {
 				t.Fatal(string(b), u, e)
 			}
@@ -106,20 +106,13 @@ func (f fakeGenerator) Generate(_ context.Context, _ Request) ([]byte, Usage, er
 	return b, Usage{}, f.err
 }
 func (fakeGenerator) Identity() string { return "fake" }
-func TestStructureValidation(t *testing.T) {
-	d := domain.NewDocument("Lin Yuan\nGo development")
-	c := domain.Candidate{Resume: domain.Resume{Name: "Lin Yuan", Education: []domain.Education{}, Skills: []string{"Go"}}, Facts: []domain.Fact{{ID: "f1", Category: "skill", BlockID: "b2", Quote: "Go development"}}}
+func TestExtractObservesUsage(t *testing.T) {
+	r := domain.Resume{Name: "Lin Yuan", Education: []domain.Education{}, Skills: []string{"Go"}}
 	observed := false
-	s := Structurer{Generator: fakeGenerator{value: c}, Observe: func(Usage) { observed = true }}
-	if _, e := s.Candidate(context.Background(), d); e != nil || !observed {
-		t.Fatal(e)
+	s := Structurer{Generator: fakeGenerator{value: r}, Observe: func(Usage) { observed = true }}
+	if _, err := s.Extract(context.Background(), domain.NewDocument("Lin Yuan\nGo development")); err != nil || !observed {
+		t.Fatal(err)
 	}
-	c.Facts[0].Quote = "made up"
-	s.Generator = fakeGenerator{value: c}
-	if _, e := s.Candidate(context.Background(), d); e == nil {
-		t.Fatal("hallucinated evidence")
-	}
-
 }
 
 func TestKimiCodeDoesNotPretendSubscriptionIsPayPerToken(t *testing.T) {

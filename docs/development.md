@@ -1,40 +1,24 @@
 # 开发恢复说明
 
-## 当前约定（2026-09-21，优先于早期记录）
+## 最新决定（2026-09-21）
 
-默认 single 单模型，保留显式 `--pipeline jev`，`hybrid` 为兼容别名。用户只是要求先把单模型做好，并未要求删除 Jev；上一轮删除已纠正。不要擅自删选项，也不要在默认路径偷偷调用 Jev。
+用户明确要求从本仓库删除 Jev，另一个 session 在独立目录维护该实验。本目录只保留单模型；移除模式参数、专用 key 读取、Candidate/Job/Matcher、证据聚合及旧报告模板。不要修改另一个目录，也不要改动用户的 .env、.env.bak 或私有凭据文件。
 
-用户质疑了公共提取任务中的编号块与64条事实。当前 public extract 独立用完整 d.Text + ResumeSchema，只输出 name/phone/email/city/education/skills，依据工作及项目实际描述整理技能，不生成facts/block_id。只校验结构与空值约定，不将技能名称逐字匹配原文当作语义正确性。独立Extractor接口及resume:v1缓存，避免复用旧Candidate缓存。
-
-评分内部保留来源可追溯，b1/b2是代码给Poppler输出非空行添加的序号，不是PDF段落，模型原先收到全部行而非某64行。64条事实是先前未经充分验证的工程取值，现已从prompt和领域验证中移除；保留总字节及Jev请求预算。Jev内部candidate:v8/job:v6缓存；当前64KiB JD上限与64条事实是不同概念。
-
-score single 最新合同：完整 d.Text + JD → report.Evaluation（四项整数分数、comment、interview_questions），policy=model-assessment-v1。不再生成 matches/引用/行号，不经 Candidate/Job/Aggregate。分数由模型判断，代码只校验结构/范围/非空，不能声称要求覆盖已验证。Jev 仍走原 Candidate/Job/Matcher/领域算分，policy=evidence-v1。单模型失败最多一次纠正，纠正请求失败也必须保留初次校验原因。
+extract 使用完整文本 + ResumeSchema。score 使用完整文本 + JD，直接生成四项分数、comment、interview_questions，policy=model-assessment-v1。保持现有提示词和一次纠正重试；纠正请求失败也保留初次校验原因。结构校验不能代表语义或要求覆盖正确。
 
 ## 测试与配置
 
-Go1.25.5、macOS Poppler26.04.0；依赖缓存/private/tmp/resume-cli-gomod与/private/tmp/resume-cli-gobuild，GOPROXY=off。本机测试hook要求CLAUDE_APPROVED=1开头；用户授权全包离线测试。AI/CLI默认transport禁网，测试不能读取.env或任何数据库。
+本机 Go 依赖缓存 /private/tmp/resume-cli-gomod 和 /private/tmp/resume-cli-gobuild，可用 GOPROXY=off。本机测试 hook 要求 CLAUDE_APPROVED=1。Go 单测使用内存替身并阻止真实网络，不读取 .env 或数据库。
 
-RESUME_AI_API_KEY为所选生成供应商key，主.env当前DS且RESUME_AI_PIPELINE=single。任务keys在.local/provider-env各0600文件；可选Jev key已从本任务私有备份恢复到主.env，仅显式Jev评分才读取。不得发现其他项目凭据。OpenAI暂缓；Kimi使用Code订阅k3及api.kimi.com/coding/v1，不混开放平台。
+统一 RESUME_AI_API_KEY，provider/model/base URL 可通过环境配置或参数覆盖。任务专用供应商配置保存在 .local/provider-env；不得发现其他项目凭据。Kimi Code 使用 k3 和 https://api.kimi.com/coding/v1。OpenAI/Claude 尚无真实 key 验证。
 
-真实简历路径在.local/session-notes.md，用户授权测试但不修改该PDF、不提交原文/个人资料。最新全文提取输出.local/real-resume/public-extract-v1/：DS 2.477s、Gemini3.285s，均一次成功，均保留14项明确技能及个人/学历字段。DS归纳43项（技术与工作能力混合），Gemini29项；数量不代表优劣。Gemini把原文Django REST API具体化为Django REST framework，原文不能确认该框架，需记录为待改进的技能归纳，不假称全字段准确。没有为此继续调prompt/重复实测。
+最近实际单模型评分 DS 63、Gemini 76、Kimi 75，各一次成功。详见 .local/session-notes.md；不同版本不得混算速度、成本或准确率。移除 Jev 不需要重新执行付费评测。
 
-旧score-v1、single-only-v1/v2是不同程序和提示版本，保留失败，不混算统计。新的可选Jev只跑离线替身回归，本轮没有实调Jev/Kimi/OpenAI。
+## 交付边界
 
-## 尚未完成
-
-- 技能归纳粒度、遗漏及无依据具体化，复杂版面/跨页来源、评分评论语义仍需检查。
-- Dockerfile最近重建因Docker Hub auth EOF未完成；上一轮已有镜像挂载当时新Linux二进制禁网运行通过，不代表当前版本重新构建成功。
-- 公开GitHub仓库、演示视频、招聘提交未完成；无remote/push。
-- Windows、OpenAI、高并发、OCR、确定性技能年限/任职区间未验证或实现。
-
-## 本轮 review 收尾
-
-详见 [修复及限制](review-fixes-2026-09-21.md)。全包离线 race 单测和 vet 通过；仅执行一次 Gemini 真实评分，无纠正重试，模型调用6.912秒、CLI6.958秒、评测脚本墙钟9.235秒。5项要求均保留，实际输出多处引用；评论仍无依据写了“全日制”，不把流程成功视为语义准确。结果位于.local/real-resume/review-single-v1/，无后台进程，不追加批量评测。
-
-## 本轮快速简化
-
-依据真实JD暴露的失败，移除默认评分的引用和中间结构合同，直接使用原题六字段结果；无新增真实API调用。旧真实结果均对应旧合同，不能当作新版本实测。全包离线回归覆盖字段缺失/null/非整数/越界/空评语/空问题、完整输入不截断、纠正失败保留原始原因及Jev兼容。尚未验证新的模型输出质量及一次成功率。
-
-## 厂商支持补齐
-
-新增anthropic（claude别名），默认claude-sonnet-5，原生Messages结构化输出；OpenAI启用严格JSON Schema。仍统一RESUME_AI_API_KEY。详情及2026-09-21官方费率核算见providers-and-cost.md。无新增真实API请求。
+- 保留用户 root resume.pdf、jd.txt 等本地材料，不纳入 Git。
+- 历史评测仅作决策记录，旧字段和命令不适用于当前版。
+- 技能归纳、评论语义及复杂 PDF 版面仍需人工复核。
+- 公开仓库、视频与招聘提交尚未完成，无 remote/push。
+- Dockerfile 上次重建曾因 Docker Hub auth EOF 未完成；本次本机测试不代表镜像已重建。
+- OCR、Windows、高并发、确定性任期合并与技能年限未实现或验证。

@@ -3,11 +3,11 @@
   "skill_score": 100,
   "experience_score": 50,
   "education_score": 100,
-  "policy_version": "model-assessment-v1",
-  "comment": "已有证据支持「熟悉 Go / PostgreSQL」。 「能够独立承担 Kubernetes 生产运维」有部分相关证据，责任范围和实践深度需要确认。 已有证据支持「本科」。",
+  "comment": "合成演示：Go/PostgreSQL 开发及本科学历符合要求，Kubernetes 独立生产运维经验需要进一步确认。",
   "interview_questions": [
-    "围绕「能够独立承担 Kubernetes 生产运维」，哪些部分由你实际负责？当时是什么环境？"
+    "请介绍你在 Kubernetes 部署和生产运维中实际承担的职责。"
   ],
+  "policy_version": "model-assessment-v1",
   "language": "zh",
   "mock": true
 }

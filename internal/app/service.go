@@ -16,78 +16,21 @@ type Parser interface {
 type Extractor interface {
 	Extract(context.Context, domain.Document) (domain.Resume, error)
 }
-type Structurer interface {
-	Candidate(context.Context, domain.Document) (domain.Candidate, error)
-	Job(context.Context, string) (domain.Job, error)
-}
-type Matcher interface {
-	Match(context.Context, domain.Candidate, domain.Job) ([]domain.Judgment, error)
-}
 type Evaluator interface {
 	Evaluate(context.Context, domain.Document, string, string) (report.Evaluation, error)
 }
 type Service struct {
-	Parser     Parser
-	Extractor  Extractor
-	Structurer Structurer
-	Matcher    Matcher
-	Evaluator  Evaluator
-	Cache      cache.Store
-	Identity   string
-	Mock       bool
-	CacheHit   func(string)
+	Parser    Parser
+	Extractor Extractor
+	Evaluator Evaluator
+	Cache     cache.Store
+	Identity  string
+	Mock      bool
+	CacheHit  func(string)
 }
 
 func (s Service) Parse(ctx context.Context, path string) (domain.Document, error) {
 	return s.Parser.Parse(ctx, path)
-}
-func (s Service) candidate(ctx context.Context, d domain.Document) (domain.Candidate, error) {
-	var c domain.Candidate
-	key := "candidate:v8:" + s.Identity + ":" + d.Hash
-	hit, e := s.Cache.Get(key, &c)
-	if e != nil {
-		return c, fmt.Errorf("candidate cache: %w", e)
-	}
-	if hit {
-		if c, e = c.Ground(d); e == nil {
-			if s.CacheHit != nil {
-				s.CacheHit("candidate")
-			}
-			return c, nil
-		}
-	}
-	c, e = s.Structurer.Candidate(ctx, d)
-	if e == nil {
-		c, e = c.Ground(d)
-	}
-	if e == nil {
-		e = s.Cache.Put(key, c)
-	}
-	return c, e
-}
-func (s Service) job(ctx context.Context, text string) (domain.Job, error) {
-	var j domain.Job
-	key := "job:v6:" + s.Identity + ":" + domain.Digest(text)
-	hit, e := s.Cache.Get(key, &j)
-	if e != nil {
-		return j, fmt.Errorf("job cache: %w", e)
-	}
-	if hit {
-		if e = j.Validate(text); e == nil {
-			if s.CacheHit != nil {
-				s.CacheHit("job")
-			}
-			return j, nil
-		}
-	}
-	j, e = s.Structurer.Job(ctx, text)
-	if e == nil {
-		e = j.Validate(text)
-	}
-	if e == nil {
-		e = s.Cache.Put(key, j)
-	}
-	return j, e
 }
 func (s Service) Extract(ctx context.Context, path string) (domain.Resume, error) {
 	d, e := s.Parse(ctx, path)
@@ -123,60 +66,12 @@ func (s Service) Score(ctx context.Context, path, jd, lang string) (report.Resul
 	if e != nil {
 		return report.Result{}, e
 	}
-	var c domain.Candidate
-	var job domain.Job
-	var judgments []domain.Judgment
-	if s.Evaluator != nil {
-		v, err := s.Evaluator.Evaluate(ctx, d, jd, lang)
-		if err != nil {
-			return report.Result{}, err
-		}
-		if err = v.Validate(); err != nil {
-			return report.Result{}, err
-		}
-		return v.Result(lang, s.Mock), nil
-	} else {
-		ctx, cancel := context.WithCancel(ctx)
-		defer cancel()
-		type result struct {
-			c         domain.Candidate
-			j         domain.Job
-			e         error
-			candidate bool
-		}
-		ch := make(chan result, 2)
-		go func() { v, e := s.candidate(ctx, d); ch <- result{c: v, e: e, candidate: true} }()
-		go func() { v, e := s.job(ctx, jd); ch <- result{j: v, e: e} }()
-		// Drain both workers after cancellation so no request or usage callback
-		// outlives the command (especially when collecting failure statistics).
-		var firstErr error
-		for range 2 {
-			r := <-ch
-			if r.e != nil && firstErr == nil {
-				firstErr = r.e
-				cancel()
-			}
-			if r.candidate {
-				c = r.c
-			} else {
-				job = r.j
-			}
-		}
-		if firstErr != nil {
-			return report.Result{}, firstErr
-		}
-		if len(c.Facts) == 0 {
-			return report.Result{}, errors.New("no assessable resume evidence; refusing to score an empty extraction")
-		}
-
-		judgments, e = s.Matcher.Match(ctx, c, job)
-		if e != nil {
-			return report.Result{}, e
-		}
+	v, err := s.Evaluator.Evaluate(ctx, d, jd, lang)
+	if err != nil {
+		return report.Result{}, err
 	}
-	a, e := domain.Aggregate(c, job, judgments)
-	if e != nil {
-		return report.Result{}, e
+	if err = v.Validate(); err != nil {
+		return report.Result{}, err
 	}
-	return report.Render(a, lang, s.Mock), nil
+	return v.Result(lang, s.Mock), nil
 }

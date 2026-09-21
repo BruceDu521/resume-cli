@@ -3,11 +3,11 @@
   "skill_score": 100,
   "experience_score": 50,
   "education_score": 100,
-  "policy_version": "model-assessment-v1",
-  "comment": "Evidence supports [Go / PostgreSQL development]. Evidence partially supports [Kubernetes production operations]; scope and depth need confirmation. Evidence supports [Bachelor].",
+  "comment": "Synthetic demo: Go/PostgreSQL development and education meet the requirements; independent Kubernetes production operations need confirmation.",
   "interview_questions": [
-    "Which parts of [Kubernetes production operations] have you personally handled, and in what environment?"
+    "Describe your responsibilities in Kubernetes deployment and production operations."
   ],
+  "policy_version": "model-assessment-v1",
   "language": "en",
   "mock": true
 }

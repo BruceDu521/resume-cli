@@ -2,7 +2,6 @@ package ai
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -15,19 +14,6 @@ type sequenceGenerator struct {
 	requests []Request
 	bodies   []string
 	err      error
-}
-
-func TestSourceGroundingRegeneration(t *testing.T) {
-	d := domain.NewDocument("Alice\nGo")
-	c := domain.Candidate{Resume: domain.Resume{Name: "Alice", Education: []domain.Education{}, Skills: []string{"Go"}}, Facts: []domain.Fact{{ID: "f1", Category: "skill", BlockID: "b2", Quote: "Rust"}}}
-	bad, _ := json.Marshal(c)
-	c.Facts[0].Quote = "Go"
-	good, _ := json.Marshal(c)
-	g := &sequenceGenerator{bodies: []string{string(bad), string(good)}}
-	got, err := (Structurer{Generator: g}).Candidate(context.Background(), d)
-	if err != nil || g.calls != 2 || got.Validate(d) != nil {
-		t.Fatal(got, g.calls, err)
-	}
 }
 
 func (s *sequenceGenerator) Identity() string { return "sequence" }
@@ -76,17 +62,17 @@ func TestBoundedFormatRegeneration(t *testing.T) {
 }
 
 func TestCorrectionIncludesSafeReasonOnly(t *testing.T) {
-	c := domain.Candidate{Resume: domain.Resume{Name: "Alice", Education: []domain.Education{}, Skills: []string{}}, Facts: []domain.Fact{{ID: "f", Category: "skill", BlockID: "b1", Quote: "private-invented-quote"}}}
-	bad, _ := json.Marshal(c)
-	c.Facts[0].Quote = "Alice"
-	good, _ := json.Marshal(c)
-	g := &sequenceGenerator{bodies: []string{string(bad), string(good)}}
-	_, err := (Structurer{Generator: g}).Candidate(context.Background(), domain.NewDocument("Alice"))
+	v := validEvaluation()
+	good := mustJSON(t, v)
+	v.Skill = 101
+	v.Comment = "private-invented-quote"
+	g := &sequenceGenerator{bodies: []string{mustJSON(t, v), good}}
+	_, err := (Structurer{Generator: g}).Evaluate(context.Background(), domain.NewDocument("Go"), "Go", "en")
 	if err != nil || len(g.requests) != 2 {
 		t.Fatal(err)
 	}
 	prompt := g.requests[1].Instruction
-	if !strings.Contains(prompt, "declared source range") || strings.Contains(prompt, "private-invented-quote") {
+	if !strings.Contains(prompt, "integers between 0 and 100") || strings.Contains(prompt, "private-invented-quote") {
 		t.Fatal("unsafe or missing validation reason")
 	}
 }

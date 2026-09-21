@@ -23,20 +23,6 @@ type model struct {
 	badReport bool
 }
 
-func (m *model) Candidate(ctx context.Context, d domain.Document) (domain.Candidate, error) {
-	m.calls++
-	if ctx.Err() != nil {
-		return domain.Candidate{}, ctx.Err()
-	}
-	if m.err != nil {
-		return domain.Candidate{}, m.err
-	}
-	c := domain.Candidate{Resume: domain.Resume{Name: "Alice", Education: []domain.Education{}, Skills: []string{"Go"}}, Facts: []domain.Fact{{ID: "f", Category: "skill", BlockID: "b2", Quote: "Go"}}}
-	if m.empty {
-		c.Facts = []domain.Fact{}
-	}
-	return c, nil
-}
 func (m *model) Evaluate(ctx context.Context, d domain.Document, jd, lang string) (report.Evaluation, error) {
 	m.calls++
 	if ctx.Err() != nil {
@@ -54,7 +40,7 @@ func (m *model) Evaluate(ctx context.Context, d domain.Document, jd, lang string
 
 func TestExtractCacheAndIndependentScore(t *testing.T) {
 	m := &model{}
-	s := Service{Parser: parser{d: domain.NewDocument("Alice\nGo")}, Extractor: m, Structurer: m, Evaluator: m, Cache: cache.Store{Dir: t.TempDir()}, Identity: "synthetic"}
+	s := Service{Parser: parser{d: domain.NewDocument("Alice\nGo")}, Extractor: m, Evaluator: m, Cache: cache.Store{Dir: t.TempDir()}, Identity: "synthetic"}
 	for range 2 {
 		if _, err := s.Extract(context.Background(), "any"); err != nil {
 			t.Fatal(err)
@@ -99,56 +85,10 @@ func TestErrors(t *testing.T) {
 	}
 }
 
-func (m *model) Extract(ctx context.Context, d domain.Document) (domain.Resume, error) {
-	c, e := m.Candidate(ctx, d)
-	return c.Resume, e
-}
-func (m *model) Job(ctx context.Context, jd string) (domain.Job, error) {
+func (m *model) Extract(ctx context.Context, _ domain.Document) (domain.Resume, error) {
+	m.calls++
 	if ctx.Err() != nil {
-		return domain.Job{}, ctx.Err()
+		return domain.Resume{}, ctx.Err()
 	}
-	return domain.Job{Requirements: []domain.Requirement{{ID: "r", Category: "skill", Text: "Go", Required: true}}}, m.err
-}
-
-type matcher struct{}
-
-func (matcher) Match(context.Context, domain.Candidate, domain.Job) ([]domain.Judgment, error) {
-	return []domain.Judgment{{RequirementID: "r", Status: "satisfied", Score: 100, EvidenceID: "f", Confidence: 1}}, nil
-}
-func TestOptionalJevPipeline(t *testing.T) {
-	m := &model{}
-	s := Service{Parser: parser{d: domain.NewDocument("Alice\nGo")}, Structurer: m, Matcher: matcher{}}
-	r, e := s.Score(context.Background(), "any", "Go", "en")
-	if e != nil || r.Overall != 100 {
-		t.Fatal(r, e)
-	}
-}
-
-type cancelStructure struct {
-	started  chan struct{}
-	finished chan struct{}
-}
-
-func (s cancelStructure) Candidate(ctx context.Context, _ domain.Document) (domain.Candidate, error) {
-	<-s.started
-	return domain.Candidate{}, errors.New("candidate failed")
-}
-func (s cancelStructure) Job(ctx context.Context, _ string) (domain.Job, error) {
-	close(s.started)
-	<-ctx.Done()
-	close(s.finished)
-	return domain.Job{}, ctx.Err()
-}
-func TestFailureCancelsAndJoinsWorkers(t *testing.T) {
-	st := cancelStructure{make(chan struct{}), make(chan struct{})}
-	s := Service{Parser: parser{d: domain.NewDocument("Alice")}, Structurer: st}
-	_, err := s.Score(context.Background(), "any", "Go", "zh")
-	if err == nil || err.Error() != "candidate failed" {
-		t.Fatal(err)
-	}
-	select {
-	case <-st.finished:
-	default:
-		t.Fatal("request worker outlived the command")
-	}
+	return domain.Resume{Name: "Alice", Education: []domain.Education{}, Skills: []string{"Go"}}, m.err
 }

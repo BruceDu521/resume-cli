@@ -10,7 +10,7 @@
 | OpenAI | openai | gpt-6-astra | 严格结构化输出，离线协议/评分流程测试通过，未实调 |
 | Anthropic | anthropic / claude | claude-sonnet-5 | 原生 Messages API，离线协议/评分流程测试通过，未实调 |
 
-可选 Jev 是额外匹配器，用 --pipeline jev 启用，另需 TYPESAFE_API_KEY；默认评分不调用它。厂商支持不意味着所有历史模型均支持所用结构化输出参数。
+厂商支持不意味着所有历史模型均支持所用结构化输出参数。
 
 ## 实测 token 对应的费用估算
 

@@ -54,7 +54,6 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--execute", action="store_true", help="actually run the CLI; real routes incur API calls")
     p.add_argument("--routes", nargs="+", choices=PATHS, default=["gemini", "deepseek"])
-    p.add_argument("--pipeline", choices=["single", "jev"], default="single", help="default single model; Jev must be explicitly selected")
     p.add_argument("--repeats", type=int, default=3)
     p.add_argument("--seed", type=int, default=20260920)
     p.add_argument("--limit", type=int, help="use only the first N cases for a smoke test")
@@ -80,7 +79,7 @@ def main():
     for source in sources:
         digest.update(str(source.relative_to(ROOT)).encode() + b"\0" + source.read_bytes())
     plan = {
-        "seed": args.seed, "pipeline": args.pipeline, "cache": "disabled", "code_sha256": digest.hexdigest(),
+        "seed": args.seed, "cache": "disabled", "code_sha256": digest.hexdigest(),
         "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "binary_sha256": hashlib.sha256(args.binary.read_bytes()).hexdigest() if args.binary.is_file() else None,
         "manifest_sha256": hashlib.sha256(args.suite.read_bytes()).hexdigest(),
@@ -103,17 +102,13 @@ def main():
         credentials = load_credentials([PATHS[r][0] for r in args.routes], args.env_dir)
     except ValueError as exc:
         p.error(str(exc))
-    if args.pipeline == "jev" and args.routes != ["mock"] and not os.environ.get("TYPESAFE_API_KEY"):
-        p.error("--pipeline jev requires TYPESAFE_API_KEY")
     os.umask(0o077)
     args.out.mkdir(parents=True, exist_ok=False)
     write_json(args.out / "plan.json", plan)
     env = os.environ.copy()
     # Pin the benchmark routes. Do not silently inherit custom proxy/model settings.
-    for key in ("RESUME_AI_API_KEY", "RESUME_AI_PROVIDER", "RESUME_AI_MODEL", "RESUME_AI_BASE_URL", "RESUME_AI_PIPELINE", "TYPESAFE_BASE_URL", "RESUME_JEV_MODEL"):
+    for key in ("RESUME_AI_API_KEY", "RESUME_AI_PROVIDER", "RESUME_AI_MODEL", "RESUME_AI_BASE_URL"):
         env.pop(key, None)
-    if args.pipeline == "single":
-        env.pop("TYPESAFE_API_KEY", None)
     rows = []
     for case, route, repeat in jobs:
         dest = args.out / f"{case['id']}-{route}-{repeat}"
@@ -123,7 +118,6 @@ def main():
             jd.write_text(case["jd_text"], encoding="utf-8")
         cmd = [str(binary), "score", str(ROOT / case["pdf"]), "--jd", str(jd), "--lang", case["lang"],
                "--timeout", "180s", "--output", str(dest / "result.json"), "--stats", str(dest / "stats.json")]
-        cmd += ["--pipeline", args.pipeline]
         provider, model = PATHS[route]
         trial_env = env.copy()
         if provider:

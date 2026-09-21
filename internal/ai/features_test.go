@@ -29,34 +29,24 @@ func TestAssessmentContract(t *testing.T) {
 func TestMockRestrictions(t *testing.T) {
 	m := Mock{}
 	ctx := context.Background()
-	if _, e := m.Candidate(ctx, domain.NewDocument("real resume")); e == nil {
-		t.Fatal("mock pretended to understand arbitrary data")
+	d := domain.NewDocument("RESUME_CLI_DEMO_V1\n林予安")
+	jd := "RESUME_CLI_JD_V1\nGo / PostgreSQL\nKubernetes\n本科"
+	if _, err := m.Extract(ctx, domain.NewDocument("real resume")); err == nil {
+		t.Fatal("arbitrary resume accepted")
 	}
-	if _, e := m.Job(ctx, "real JD"); e == nil {
-		t.Fatal("mock arbitrary JD")
+	if _, err := m.Evaluate(ctx, d, "real JD", "zh"); err == nil {
+		t.Fatal("arbitrary JD accepted")
 	}
-	d := domain.NewDocument("RESUME_CLI_DEMO_V1\n林予安 | 杭州\nlin.yuan@example.com\n示例大学 | 软件工程 | 本科 | 2022\nGo / PostgreSQL\nKubernetes 部署")
-	c, e := m.Candidate(ctx, d)
-	if e != nil {
-		t.Fatal(e)
-	}
-	j, e := m.Job(ctx, "RESUME_CLI_JD_V1\nGo / PostgreSQL\nKubernetes\n本科")
-	if e != nil {
-		t.Fatal(e)
-	}
-	if _, e = m.Match(ctx, c, j); e != nil {
-		t.Fatal(e)
+	if _, err := m.Evaluate(ctx, d, jd, "zh"); err != nil {
+		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	cancel()
-	if _, e = m.Candidate(ctx, d); !errors.Is(e, context.Canceled) {
-		t.Fatal(e)
+	if _, err := m.Extract(ctx, d); !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
 	}
-	if _, e = m.Job(ctx, ""); !errors.Is(e, context.Canceled) {
-		t.Fatal(e)
-	}
-	if _, e = m.Match(ctx, c, j); !errors.Is(e, context.Canceled) {
-		t.Fatal(e)
+	if _, err := m.Evaluate(ctx, d, jd, "en"); !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
 	}
 }
 func TestRemoteEmptyUsageAndIncomplete(t *testing.T) {
@@ -78,13 +68,9 @@ func TestRemoteEmptyUsageAndIncomplete(t *testing.T) {
 	}
 }
 func TestMissingRequiredNestedField(t *testing.T) {
-	s := Structurer{Generator: fakeGenerator{value: map[string]any{"resume": map[string]any{"education": []any{}, "skills": []any{}}, "facts": []any{}}}}
-	if _, e := s.Candidate(context.Background(), domain.NewDocument("any")); e == nil {
-		t.Fatal("missing keys accepted")
-	}
-	_, e := json.Marshal(CandidateSchema())
-	if e != nil {
-		t.Fatal(e)
+	s := Structurer{Generator: fakeGenerator{value: map[string]any{"name": "Alice", "phone": "", "email": "", "city": "", "skills": []any{}, "education": []any{map[string]any{"school": "Example", "degree": "Bachelor", "graduation_time": "2022"}}}}}
+	if _, err := s.Extract(context.Background(), domain.NewDocument("Alice")); err == nil {
+		t.Fatal("missing nested major accepted")
 	}
 }
 
@@ -99,20 +85,5 @@ func TestMissingTokenCountsAreUnknown(t *testing.T) {
 		if err != nil || u.Known || u.CostUSD != nil || u.CostComplete {
 			t.Fatal(u, err)
 		}
-	}
-}
-
-func TestCandidateWrappedCitation(t *testing.T) {
-	d := domain.NewDocument("Alice\nNo Rust\nproduction experience.")
-	c := domain.Candidate{Resume: domain.Resume{Education: []domain.Education{}, Skills: []string{}}, Facts: []domain.Fact{{ID: "f1", Category: "experience", BlockID: "b2", EndBlockID: "b3", Quote: "No Rust production experience."}}}
-	st := Structurer{Generator: fakeGenerator{value: c}}
-	got, err := st.Candidate(context.Background(), d)
-	if err != nil || got.Facts[0].EndBlockID != "b3" {
-		t.Fatal(got, err)
-	}
-	c.Facts[0].EndBlockID = ""
-	st.Generator = fakeGenerator{value: c}
-	if _, err = st.Candidate(context.Background(), d); err == nil {
-		t.Fatal("bad citation accepted")
 	}
 }

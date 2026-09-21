@@ -209,27 +209,21 @@ func TestLegacyKeysDoNotSelectCredential(t *testing.T) {
 	}
 }
 
-func TestDefaultAndOptionalJev(t *testing.T) {
-	cmd := New(&bytes.Buffer{}, &bytes.Buffer{}, func(string) string { return "" })
-	mode, _ := cmd.PersistentFlags().GetString("pipeline")
-	if mode != "single" {
-		t.Fatal("default should be single", mode)
-	}
-	for _, mode := range []string{"jev", "hybrid"} {
-		out, _, err := run("score", "../../testdata/resume-zh.pdf", "--jd", "../../testdata/jd.txt", "--pipeline", mode, "--mock")
-		if err != nil || !strings.Contains(out, `"overall_score": 83`) {
-			t.Fatal(mode, err)
-		}
-	}
-	cmd = New(&bytes.Buffer{}, &bytes.Buffer{}, func(k string) string {
-		if k == "RESUME_AI_API_KEY" {
-			return "fake"
+func TestRemovedPipelineOptions(t *testing.T) {
+	cmd := New(&bytes.Buffer{}, &bytes.Buffer{}, func(k string) string {
+		if strings.HasPrefix(k, "TYPESAFE_") || k == "RESUME_AI_PIPELINE" || k == "RESUME_JEV_MODEL" {
+			t.Fatal("read removed config", k)
 		}
 		return ""
 	})
-	cmd.SetArgs([]string{"score", "missing.pdf", "--jd", "../../testdata/jd.txt", "--provider", "deepseek", "--pipeline", "jev"})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "TYPESAFE_API_KEY") {
-		t.Fatal(err)
+	if cmd.PersistentFlags().Lookup("pipeline") != nil || cmd.PersistentFlags().Lookup("jev-model") != nil {
+		t.Fatal("removed flags still present")
+	}
+	for _, args := range [][]string{{"--pipeline", "jev"}, {"--pipeline", "single"}, {"--jev-model", "x"}} {
+		_, _, err := run(append([]string{"score", "x", "--jd", "y"}, args...)...)
+		if err == nil || !strings.Contains(err.Error(), "unknown flag") {
+			t.Fatal(err)
+		}
 	}
 }
 

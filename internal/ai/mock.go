@@ -13,12 +13,12 @@ import (
 // infer arbitrary candidates. Tests for broader behavior use injected fakes.
 type Mock struct{}
 
-func (Mock) Candidate(ctx context.Context, d domain.Document) (domain.Candidate, error) {
+func (Mock) Extract(ctx context.Context, d domain.Document) (domain.Resume, error) {
 	if e := ctx.Err(); e != nil {
-		return domain.Candidate{}, e
+		return domain.Resume{}, e
 	}
 	if !strings.Contains(d.Text, "RESUME_CLI_DEMO_V1") {
-		return domain.Candidate{}, errors.New("mock supports only testdata/resume-zh.pdf and resume-en.pdf")
+		return domain.Resume{}, errors.New("mock supports only testdata/resume-zh.pdf and resume-en.pdf")
 	}
 	r := domain.Resume{Name: "Lin Yuan", City: "Hangzhou", Email: "lin.yuan@example.com", Education: []domain.Education{{School: "Example University", Major: "Software Engineering", Degree: "Bachelor", GraduationTime: "2022"}}, Skills: []string{"Go", "PostgreSQL", "Kubernetes"}}
 	if strings.Contains(d.Text, "林予安") {
@@ -26,78 +26,25 @@ func (Mock) Candidate(ctx context.Context, d domain.Document) (domain.Candidate,
 		r.City = "杭州"
 		r.Education = []domain.Education{{School: "示例大学", Major: "软件工程", Degree: "本科", GraduationTime: "2022"}}
 	}
-	c := domain.Candidate{Resume: r, Facts: []domain.Fact{}}
-	for _, b := range d.Blocks {
-		cat := ""
-		id := ""
-		switch {
-		case strings.Contains(b.Text, "Go / PostgreSQL"):
-			cat = "skill"
-			id = "dev"
-		case strings.Contains(b.Text, "Kubernetes"):
-			cat = "experience"
-			id = "ops"
-		case strings.Contains(b.Text, "2022") && (strings.Contains(b.Text, "University") || strings.Contains(b.Text, "大学")):
-			cat = "education"
-			id = "edu"
-		}
-		if cat != "" {
-			c.Facts = append(c.Facts, domain.Fact{ID: id, Category: cat, BlockID: b.ID, Quote: b.Text})
-		}
-	}
-	return c, c.Validate(d)
+	return r, nil
 }
-func (Mock) Job(ctx context.Context, text string) (domain.Job, error) {
-	if e := ctx.Err(); e != nil {
-		return domain.Job{}, e
-	}
-	if !strings.Contains(text, "RESUME_CLI_JD_V1") {
-		return domain.Job{}, errors.New("mock supports only testdata/jd.txt and jd-en.txt")
-	}
-	lines := strings.Split(strings.TrimSpace(text), "\n")
-	if len(lines) != 4 {
-		return domain.Job{}, errors.New("invalid mock JD fixture")
-	}
-	j := domain.Job{Requirements: []domain.Requirement{{ID: "dev", Category: "skill", Text: lines[1], Required: true}, {ID: "ops", Category: "experience", Text: lines[2], Required: true}, {ID: "edu", Category: "education", Text: lines[3], Required: true}}}
-	return j, j.Validate(text)
-}
-func (Mock) Match(ctx context.Context, c domain.Candidate, j domain.Job) ([]domain.Judgment, error) {
-	if e := ctx.Err(); e != nil {
-		return nil, e
-	}
-	out := []domain.Judgment{}
-	for _, r := range j.Requirements {
-		s, score := "satisfied", 100.0
-		if r.ID == "ops" {
-			s, score = "partial", 50
-		}
-		out = append(out, domain.Judgment{RequirementID: r.ID, Status: s, Score: score, EvidenceID: r.ID, Confidence: 1})
-	}
-	return out, nil
-}
-
 func (m Mock) Evaluate(ctx context.Context, d domain.Document, jd, lang string) (report.Evaluation, error) {
-	c, e := m.Candidate(ctx, d)
-	if e != nil {
-		return report.Evaluation{}, e
+	if _, err := m.Extract(ctx, d); err != nil {
+		return report.Evaluation{}, err
 	}
-	j, e := m.Job(ctx, jd)
-	if e != nil {
-		return report.Evaluation{}, e
+	if !strings.Contains(jd, "RESUME_CLI_JD_V1") || len(strings.Split(strings.TrimSpace(jd), "\n")) != 4 {
+		return report.Evaluation{}, errors.New("mock supports only testdata/jd.txt and jd-en.txt")
 	}
-	v, e := m.Match(ctx, c, j)
-	if e != nil {
-		return report.Evaluation{}, e
+	v := report.Evaluation{Overall: 83, Skill: 100, Experience: 50, Education: 100}
+	switch lang {
+	case "zh":
+		v.Comment = "合成演示：Go/PostgreSQL 开发及本科学历符合要求，Kubernetes 独立生产运维经验需要进一步确认。"
+		v.Questions = []string{"请介绍你在 Kubernetes 部署和生产运维中实际承担的职责。"}
+	case "en":
+		v.Comment = "Synthetic demo: Go/PostgreSQL development and education meet the requirements; independent Kubernetes production operations need confirmation."
+		v.Questions = []string{"Describe your responsibilities in Kubernetes deployment and production operations."}
+	default:
+		return report.Evaluation{}, errors.New("language must be zh or en")
 	}
-	a, e := domain.Aggregate(c, j, v)
-	if e != nil {
-		return report.Evaluation{}, e
-	}
-	r := report.Render(a, lang, true)
-	return report.Evaluation{Overall: r.Overall, Skill: r.Skill, Experience: r.Experience, Education: r.Education, Comment: r.Comment, Questions: r.Questions}, nil
-}
-
-func (m Mock) Extract(ctx context.Context, d domain.Document) (domain.Resume, error) {
-	c, err := m.Candidate(ctx, d)
-	return c.Resume, err
+	return v, nil
 }

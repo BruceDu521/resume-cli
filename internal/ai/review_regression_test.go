@@ -72,17 +72,6 @@ func TestCorrectionFailurePreservesOriginalReason(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-func TestDistributedEvidenceStillSupportedByDomain(t *testing.T) {
-	d := domain.NewDocument("golang APIs\nUnrelated\nPostgreSQL backups")
-	c := domain.Candidate{Resume: domain.Resume{Education: []domain.Education{}, Skills: []string{"Go"}}, Facts: []domain.Fact{{ID: "a", Category: "skill", BlockID: "b1", Quote: "golang APIs"}, {ID: "b", Category: "skill", BlockID: "b3", Quote: "PostgreSQL backups"}}}
-	if err := c.Validate(d); err != nil {
-		t.Fatal(err)
-	}
-	a, err := domain.Aggregate(c, domain.Job{Requirements: []domain.Requirement{{ID: "r", Category: "skill", Text: "Go and PostgreSQL", Required: true}}}, []domain.Judgment{{RequirementID: "r", Status: "satisfied", Score: 100, EvidenceIDs: []string{"a", "b"}}})
-	if err != nil || len(a.Findings[0].Evidences) != 2 {
-		t.Fatal(a, err)
-	}
-}
 func mustJSON(t *testing.T, v any) string {
 	t.Helper()
 	b, e := json.Marshal(v)

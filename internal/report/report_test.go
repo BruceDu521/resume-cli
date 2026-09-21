@@ -1,36 +1,26 @@
 package report
 
 import (
-	"strings"
+	"encoding/json"
 	"testing"
-
-	"resume-cli/internal/domain"
 )
 
-func TestLanguagesAndUnknown(t *testing.T) {
-	a := domain.Assessment{Overall: 42, NotRequired: []string{"education"}, Findings: []domain.Finding{}}
-	for _, s := range []string{"unknown", "partial", "unmet", "satisfied"} {
-		a.Findings = append(a.Findings, domain.Finding{Requirement: domain.Requirement{Text: "Go"}, Judgment: domain.Judgment{Status: s}})
+func TestResultKeepsPublicJSONContract(t *testing.T) {
+	v := Evaluation{Overall: 75, Skill: 80, Experience: 60, Education: 100, Comment: "Review", Questions: []string{"Explain?"}}
+	b, err := json.Marshal(v.Result("en", false))
+	if err != nil {
+		t.Fatal(err)
 	}
-	zh, en := Render(a, "zh", true), Render(a, "en", true)
-	if zh.Overall != en.Overall || len(zh.Questions) != 3 || !strings.Contains(zh.Comment, "不代表") || !strings.Contains(en.Comment, "not proof") || !zh.Mock {
-		t.Fatal(zh, en)
+	var fields map[string]json.RawMessage
+	if err = json.Unmarshal(b, &fields); err != nil {
+		t.Fatal(err)
 	}
-	a.Findings = a.Findings[3:]
-	if len(Render(a, "zh", false).Questions) != 1 || len(Render(a, "en", false).Questions) != 1 {
-		t.Fatal("missing satisfied question")
-	}
-}
-
-func TestEvidenceConflictIsVisibleInBothLanguages(t *testing.T) {
-	a := domain.Assessment{Overall: 0, Findings: []domain.Finding{{
-		Requirement: domain.Requirement{Text: "Go"},
-		Judgment:    domain.Judgment{Status: "unknown", Score: 0, ReviewReason: "model_judgment_without_evidence"},
-	}}}
-	for lang, warning := range map[string]string{"zh": "需复核，暂不计分", "en": "needs review and earns no credit"} {
-		r := Render(a, lang, false)
-		if !strings.Contains(r.Comment, warning) || r.Overall != 0 || len(r.Questions) != 1 || r.Mock {
-			t.Fatalf("%s hides evidence conflict: %+v", lang, r)
+	for _, key := range []string{"overall_score", "skill_score", "experience_score", "education_score", "comment", "interview_questions", "policy_version", "language", "mock"} {
+		if _, ok := fields[key]; !ok {
+			t.Fatal("missing public field", key)
 		}
+	}
+	if len(fields) != 9 {
+		t.Fatal("unexpected legacy fields", string(b))
 	}
 }

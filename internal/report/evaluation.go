@@ -3,8 +3,6 @@ package report
 import (
 	"errors"
 	"strings"
-
-	"resume-cli/internal/domain"
 )
 
 // Evaluation is the public single-model scoring contract. Scores are model
@@ -38,5 +36,5 @@ func (v Evaluation) Validate() error {
 	return nil
 }
 func (v Evaluation) Result(lang string, mock bool) Result {
-	return Result{Assessment: domain.Assessment{Overall: v.Overall, Skill: v.Skill, Experience: v.Experience, Education: v.Education, Policy: "model-assessment-v1"}, Comment: v.Comment, Questions: v.Questions, Language: lang, Mock: mock}
+	return Result{Evaluation: v, Policy: "model-assessment-v1", Language: lang, Mock: mock}
 }

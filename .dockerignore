@@ -7,3 +7,4 @@
 !internal/**
 !testdata/
 !testdata/**
+!samples.go

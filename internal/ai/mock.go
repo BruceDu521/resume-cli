@@ -18,7 +18,7 @@ func (Mock) Extract(ctx context.Context, d domain.Document) (domain.Resume, erro
 		return domain.Resume{}, e
 	}
 	if !strings.Contains(d.Text, "RESUME_CLI_DEMO_V1") {
-		return domain.Resume{}, errors.New("mock supports only testdata/resume-zh.pdf and resume-en.pdf")
+		return domain.Resume{}, errors.New("mock supports only synthetic resumes; export them with: resume-cli samples demo-inputs")
 	}
 	r := domain.Resume{Name: "Lin Yuan", City: "Hangzhou", Email: "lin.yuan@example.com", Education: []domain.Education{{School: "Example University", Major: "Software Engineering", Degree: "Bachelor", GraduationTime: "2022"}}, Skills: []string{"Go", "PostgreSQL", "Kubernetes"}}
 	if strings.Contains(d.Text, "林予安") {
@@ -33,7 +33,7 @@ func (m Mock) Evaluate(ctx context.Context, d domain.Document, jd, lang string) 
 		return report.Evaluation{}, err
 	}
 	if !strings.Contains(jd, "RESUME_CLI_JD_V1") || len(strings.Split(strings.TrimSpace(jd), "\n")) != 4 {
-		return report.Evaluation{}, errors.New("mock supports only testdata/jd.txt and jd-en.txt")
+		return report.Evaluation{}, errors.New("mock supports only synthetic JDs; export them with: resume-cli samples demo-inputs")
 	}
 	v := report.Evaluation{Overall: 83, Skill: 100, Experience: 50, Education: 100}
 	switch lang {

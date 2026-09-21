@@ -1,6 +1,6 @@
 # resume-cli
 
-用 Go 编写的 PDF 简历解析与岗位匹配工具。支持本地提取 PDF 文本、用 AI 整理简历信息，以及结合岗位描述生成匹配评分、评语和面试问题。可以不配置 API key，直接用随附样例离线演示。
+用 Go 编写的 PDF 简历解析与岗位匹配工具。支持本地提取 PDF 文本、用 AI 整理简历信息，以及结合岗位描述生成匹配评分、评语和面试问题。可以不配置 API key，从二进制导出内置样例后离线演示。
 
 ## 需求理解与实现范围
 
@@ -16,27 +16,43 @@
 
 评分用于辅助人工阅读：它是模型对“简历所述经历与岗位要求”的评价，不是对候选人真实能力的客观测量。缺少描述不等于缺少能力；JSON 校验通过也不意味着内容完全准确。
 
-## 快速开始：无需 API key
+## 安装与离线演示
 
-依赖 **Go 1.25.5 或更新的兼容版本**、**Poppler**（`pdftotext`）；Linux 建议同时安装 `poppler-data`。
+### 已拿到二进制
+
+使用与你的操作系统、CPU 架构匹配的 `resume-cli`，不需要安装 Go 或下载源码。**运行 PDF 命令仍需安装 Poppler**：macOS 执行 `brew install poppler`；Debian/Ubuntu 执行 `sudo apt-get install poppler-utils poppler-data`。也可使用下文自带 Poppler 的 Docker 镜像。
+
+中英文合成 PDF 和 JD 已通过 Go `embed` 编入二进制。即使当前目录没有源码或 `testdata`，也可以导出：
 
 ```sh
-# 在仓库根目录执行；macOS 安装依赖
-brew install go poppler
-# Debian / Ubuntu 安装 PDF 工具；Go 需另行安装对应版本
-# sudo apt-get install poppler-utils poppler-data
-
-make build
-./bin/resume-cli --help
-
-./bin/resume-cli parse testdata/resume-zh.pdf
-./bin/resume-cli extract testdata/resume-zh.pdf --mock
-./bin/resume-cli score testdata/resume-zh.pdf --jd testdata/jd.txt --mock
+# 二进制放在当前目录时；如果已加入 PATH，可以省略 ./
+./resume-cli samples demo-inputs
+./resume-cli parse demo-inputs/resume-zh.pdf
+./resume-cli extract demo-inputs/resume-zh.pdf --mock
+./resume-cli score demo-inputs/resume-zh.pdf --jd demo-inputs/jd.txt --mock
 ```
 
-也可以运行 `make demo`，依次演示三个命令。首次构建需要下载 Go 模块；演示本身不访问 AI API。
+`samples <新目录>` 不需要网络、key 或 Poppler，导出 `resume-zh.pdf`、`resume-en.pdf`、`jd.txt`、`jd-en.txt`。目标目录必须不存在，父目录必须存在；即使加 `--force` 也不会覆盖已有目录。
 
-`--mock` 仅用于项目随附的中英文合成简历与对应 JD，返回固定演示内容，不支持任意真实简历推断。score 的 JSON 含 `mock: true`；extract 保持规定的字段结构，mock 提示写入 stderr。
+### 从源码构建
+
+构建需要 **Go 1.25.5 或更新的兼容版本**，运行 PDF 命令需要 Poppler。在仓库根目录执行：
+
+```sh
+# macOS；Linux 的 Go 请另行安装对应版本
+brew install go poppler
+make build
+./bin/resume-cli --help
+make demo
+```
+
+`make build` 读取仓库中的 Makefile，生成本机使用的 `bin/resume-cli`；`make demo` 构建后用仓库里的样例演示三个命令。首次构建可能下载 Go 模块，演示不访问 AI API。
+
+### mock 的用途与机制
+
+`--mock` 用固定的内存实现替换真实 AI 适配器，供没有 key 的使用者演示，也便于离线回归。PDF 读取与 Poppler 解析、输入检查、JSON 输出和文件保存仍走正常流程；模型提取和评分返回预先定义的合成结果。
+
+它仅接受上述合成简历和对应 JD，通过样例标记识别输入，不会分析任意真实简历；修改样例不会让固定评分自动变化。score 的 JSON 含 `mock: true`；extract 保持规定字段结构，mock 提示写入 stderr。它能演示程序流程，不能证明模型提取或评分质量。
 
 ## 配置真实模型
 
@@ -136,7 +152,7 @@ set +a
 
 ### 界面语言与报告语言
 
-帮助与常见输入错误按 `RESUME_CLI_LANG` → `LC_ALL` → `LC_MESSAGES` → `LANG` 的优先级取首个非空值。中文 locale（如 `zh_CN.UTF-8`、`zh_TW`）使用中文；其他、C/POSIX 或未设置时使用英文。无需分别编译。技术诊断与日志保持英文。
+帮助与常见输入错误按 `RESUME_CLI_LANG` → `LC_ALL` → `LC_MESSAGES` → `LANG` 的优先级取首个非空值。**没有显式指定 `RESUME_CLI_LANG` 时，使用当前 terminal 终端通过 locale 环境变量提供的语言。**终端也未提供这些变量时回退英文。中文 locale（如 `zh_CN.UTF-8`、`zh_TW`）使用中文；其他、C/POSIX 或未设置时使用英文。无需分别编译。技术诊断与日志保持英文。
 
 ```sh
 RESUME_CLI_LANG=en ./bin/resume-cli --help
@@ -227,6 +243,25 @@ flowchart LR
 | 原生 HTTP 适配器 | 用小接口隔离厂商差异；无大型 Agent 框架或数据库依赖，便于离线测试 |
 | JSON Schema + 本地校验 | 尽早约束输出格式并检查字段；不能替代语义正确性验证 |
 
+### 尝试过的方案：通用模型 + Jev
+
+Jev 是 TypeSafe 的 System One 模型，面向有明确返回类型的局部语义判断。我们考虑用通用模型从简历和 JD 整理事实、要求，再让 Jev 判断匹配关系，由代码汇总评分，以减少长文本生成的开销并控制评分过程。
+
+两种类型与简历评估有关：
+
+- **[Score](https://docs.typesafe.ai/primitives/score)**：在有顺序、有描述的等级之间判断，例如“未体现 → 基础了解 → 项目实践 → 独立生产负责”，返回等级概率和相应数值。它可用于单项能力匹配，但不是天然的招聘百分制，需要另行定义等级和换算规则。
+- **[Choice](https://docs.typesafe.ai/primitives/choice)**：从指定选项中判断，例如“满足 / 部分满足 / 不满足 / 未知”，或选择支持结论的事实。选项和候选证据由程序提供，无法弥补上游遗漏。
+
+Score 是设计时考虑的方向；实际保留评测记录的组合原型使用 **Choice 判断匹配状态及证据，再由代码映射分数并聚合**，并非直接用 Jev Score 输出最终分数。概率或置信度也不能当作结论正确的保证。
+
+本项目最终选择单模型，原因是：
+
+1. **配置更复杂。** 使用者除了通用模型，还要配置 Jev 的 key；开发侧也多了一套适配器、中间结构和失败处理。
+2. **成本和速度没有形成足够的整体优势。** 加上事实提取、Jev 判断及报告生成后，未体现出值得增加一套依赖的稳定收益；DeepSeek、Gemini Flash 已能完成较低成本的单模型任务。
+3. **最终评分在测试中不够合理。** 事实提取遗漏、匹配状态与所选证据不一致，以及固定分值/权重，都会影响最终结果。结构合规不等于评分合理，继续修补中间约束还会增加复杂度。
+
+早期短合成集曾出现组合方案估算费用更低、规则通过率更高的结果，但那时单模型使用了更复杂的输出结构，不能直接与现在的全文输入、简洁报告比较。以上是本任务端到端方案的取舍，不是对 Jev 所有用途的结论。历史数据见[单模型与组合方案评测](docs/evaluation-single-vs-hybrid-2026-09-20.md)；当前代码已移除 Jev 运行路径，不需要它的配置。
+
 ### 错误恢复与文件安全
 
 - 模型 JSON 只自动修复 BOM、完整代码围栏和字符串外的尾逗号。拒绝缺项、null、重复键、未知字段和错误字段类型；评分另校验分数范围、非空评语和面试问题。
@@ -248,6 +283,7 @@ PDF 解析在本地进行；真实 extract/score 会把**提取出的简历文�
 ### 代码结构
 
 ```text
+samples.go        将四份合成样例嵌入二进制
 cmd/resume-cli/    程序入口、信号与退出码
 internal/cli/     命令、配置、帮助、参数校验和依赖组装
 internal/app/     Parse / Extract / Score 用例与小接口
@@ -264,10 +300,10 @@ scripts/          合成数据生成与独立评测工具
 
 详细实现见 [架构文档](docs/architecture.md) 和 [全文提取设计](docs/extraction-design.md)。
 
-## 验证、成本与 Docker
+## 测试与调用成本
 
 ```sh
-# make build 下载过所需依赖后，以下 Go 检查使用本地模块缓存
+# 单元测试、race 检查和静态检查；不调用真实 AI
 make check
 python3 -m unittest discover -s scripts -p 'test_*.py'
 
@@ -277,21 +313,43 @@ python3 scripts/evaluate.py
 python3 scripts/evaluate.py --routes mock --repeats 1 --execute --out .local/eval-demo
 ```
 
+首次构建或测试时，Go 可能下载 `go.mod` 中的公开代码依赖，下载后会缓存在本机；这与调用 AI 是两回事。需要完全断网运行时，先在联网环境执行 `go mod download`，然后运行 `GOPROXY=off make check`（还需预先安装对应 Go 工具链和 Poppler）。
+
 Go 测试使用内存 HTTP 替身，AI/CLI 测试默认禁止真实网络，不读取 `.env`。覆盖文件与大小边界、参数范围/溢出、PDF 进程失败、完整输入、JSON 修复、一次纠正、厂商协议、超时取消、缓存、输出防覆盖及中英文界面/报告的独立性。`make check` 包含单测、race 和 vet。
 
 DeepSeek、Gemini、Kimi Code 有有限真实调用记录，OpenAI/Claude 仅做过离线协议验证。旧评测使用过不同 prompt 和评分结构，不能把它们混算成当前版本的准确率或速度保证。
 
 `--stats` 的费用按供应商返回的 token 和代码中的费率估算；未知费用不当作零，Kimi Code 订阅不折算成按 token 美元账单。详见 [厂商与成本](docs/providers-and-cost.md)。真实评测需显式执行并配置对应 key，方法见 [评测协议](docs/evaluation.md)。
 
-Dockerfile 使用多阶段构建和非 root 运行用户，包含 Poppler 及演示样例：
+## Docker 使用方式
+
+Dockerfile 是镜像构建说明，`make build` 不会构建镜像。安装并启动 Docker 后，在仓库根目录执行：
 
 ```sh
+# 构建包含 CLI、Poppler、证书及合成样例的镜像
+# 修改代码后需重新执行此命令
 docker build -t resume-cli .
+
+# 查看帮助；镜像 ENTRYPOINT 已是 resume-cli，后面直接写子命令
+docker run --rm resume-cli --help
+
+# 禁网演示，无需 API key，也无需在宿主机安装 Go 或 Poppler
 docker run --rm --network none resume-cli score /examples/resume-zh.pdf \
   --jd /examples/jd.txt --mock
 ```
 
-构建需要访问基础镜像和包源；mock 容器运行可禁网。本轮验证为本机离线测试与二进制演示，未重新验证最新镜像构建。
+真实调用示例（macOS/Linux shell）：先把 `resume.pdf` 和 UTF-8 `jd.txt` 放进当前目录的 `input/`，在 `.env` 中填写 `RESUME_AI_PROVIDER`、`RESUME_AI_API_KEY` 等 `KEY=value` 配置，再执行：
+
+```sh
+docker run --rm --user "$(id -u):$(id -g)" \
+  --env-file .env \
+  -v "$PWD/input:/input:ro" \
+  resume-cli score /input/resume.pdf --jd /input/jd.txt > result.json
+```
+
+`/input` 是容器里的只读路径；`> result.json` 由宿主机 shell 保存结果，日志仍显示在 stderr。重定向会覆盖宿主机同名文件，请使用新的结果文件名；若使用容器内的 `--output`，应另挂载可写输出目录，否则 `--rm` 会连同容器一起删除结果。`.env` 只在运行时通过 `--env-file` 传入，不打包进镜像。
+
+镜像使用多阶段构建，默认以非 root 用户运行；真实输入示例用当前用户 UID/GID 读取其文件。构建需要访问基础镜像、系统包源和 Go 依赖源；真实 AI 调用需要网络，mock 运行可禁网。最新镜像的构建验证状态见[开发记录](docs/development.md)。
 
 ## 已知限制与后续工作
 

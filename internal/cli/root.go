@@ -71,14 +71,15 @@ func New(out, errOut io.Writer, getenv func(string) string) *cobra.Command {
 	root.SetOut(out)
 	root.SetErr(errOut)
 	configureHelp(root, uiLang)
-	root.Example = "  resume-cli parse resume.pdf\n  resume-cli extract resume.pdf\n  resume-cli score resume.pdf --jd jd.txt\n  resume-cli score testdata/resume-zh.pdf --jd testdata/jd.txt --mock"
+	root.AddCommand(samplesCommand(uiLang))
+	root.Example = "  resume-cli samples demo-inputs\n  resume-cli parse resume.pdf\n  resume-cli extract resume.pdf\n  resume-cli score resume.pdf --jd jd.txt\n  resume-cli score demo-inputs/resume-zh.pdf --jd demo-inputs/jd.txt --mock"
 	root.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
 		return i18n.Errorf("参数无法识别或格式不正确：%v。请运行 %s --help 查看用法。", err, cmd.CommandPath())
 	})
 	f := root.PersistentFlags()
 	f.StringVar(&o.output, "output", "", tr("结果保存路径，如 result.json；不填则打印到终端"))
 	f.BoolVar(&o.force, "force", false, tr("允许覆盖 --output / --stats 指定的已有文件；不会覆盖输入"))
-	f.BoolVar(&o.mock, "mock", false, tr("不用 API key 演示；仅支持 testdata 中的合成简历和 JD"))
+	f.BoolVar(&o.mock, "mock", false, tr("不用 API key 演示；仅支持 samples 导出的合成简历和 JD"))
 	f.StringVar(&o.lang, "lang", "zh", tr("score 评语和面试问题的语言：zh 中文，en 英文"))
 	f.StringVar(&o.provider, "provider", getenv("RESUME_AI_PROVIDER"), tr("AI 厂商（也可设 RESUME_AI_PROVIDER）；可选值见下方配置"))
 	f.StringVar(&o.model, "model", getenv("RESUME_AI_MODEL"), tr("模型型号，如 deepseek-flash（也可设 RESUME_AI_MODEL）"))
@@ -106,10 +107,10 @@ func New(out, errOut io.Writer, getenv func(string) string) *cobra.Command {
 			cmd.Example = "  resume-cli parse resume.pdf\n  resume-cli parse resume.pdf --output resume.txt"
 		case "extract":
 			cmd.Short = tr("调用 AI 提取姓名、联系方式、教育经历和技能，输出 JSON")
-			cmd.Example = "  resume-cli extract resume.pdf\n  resume-cli extract resume.pdf --provider deepseek --output extracted.json\n  resume-cli extract testdata/resume-zh.pdf --mock"
+			cmd.Example = "  resume-cli extract resume.pdf\n  resume-cli extract resume.pdf --provider deepseek --output extracted.json\n  resume-cli extract demo-inputs/resume-zh.pdf --mock"
 		case "score":
 			cmd.Short = tr("结合简历与岗位描述，生成匹配评分、评语和面试问题")
-			cmd.Example = "  resume-cli score resume.pdf --jd jd.txt\n  resume-cli score resume.pdf --jd jd.txt --lang en --output result.json\n  resume-cli score testdata/resume-zh.pdf --jd testdata/jd.txt --mock"
+			cmd.Example = "  resume-cli score resume.pdf --jd jd.txt\n  resume-cli score resume.pdf --jd jd.txt --lang en --output result.json\n  resume-cli score demo-inputs/resume-zh.pdf --jd demo-inputs/jd.txt --mock"
 		}
 		if name == "score" {
 			cmd.Flags().StringVar(&o.jd, "jd", "", tr("必填：UTF-8 岗位描述文件路径，如 jd.txt（不是 PDF）"))

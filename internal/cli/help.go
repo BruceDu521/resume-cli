@@ -31,7 +31,8 @@ AI 配置（extract / score 使用；parse 和 --mock 不需要密钥）：
 
 已配置环境变量时，无需再传 --provider 或 --model；命令行参数优先。
 程序不会自动读取 .env。使用自己配置的 .env：set -a; source .env; set +a
-界面语言：RESUME_CLI_LANG > LC_ALL > LC_MESSAGES > LANG。
+界面语言：RESUME_CLI_LANG > LC_ALL > LC_MESSAGES > LANG，取首个非空值。
+未显式指定 RESUME_CLI_LANG 时，使用当前终端通过 locale 环境变量提供的语言。
 zh 开头使用中文，其他语言或未设置时使用英文；可设 RESUME_CLI_LANG=zh 或 en。
 报告语言独立：默认中文，仅由 --lang en 切换为英文。
 
@@ -70,7 +71,8 @@ When environment variables are set, --provider and --model can be omitted.
 Command-line options take precedence. The CLI does not automatically load .env.
 To load your own .env in a POSIX shell: set -a; source .env; set +a
 
-Interface language: RESUME_CLI_LANG > LC_ALL > LC_MESSAGES > LANG.
+Interface language: RESUME_CLI_LANG > LC_ALL > LC_MESSAGES > LANG (first nonempty value).
+Without RESUME_CLI_LANG, use the current terminal language provided by its locale environment.
 Locales starting with zh use Chinese; other/unset locales use English.
 Override with RESUME_CLI_LANG=zh or en.
 Report language is independent: Chinese by default; use --lang en for English.

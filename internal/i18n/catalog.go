@@ -1,6 +1,12 @@
 package i18n
 
 var english = map[string]string{
+	" <新目录>": " <new-directory>",
+	"导出内置中英文合成简历和 JD，无需源码、密钥或网络":                    "Export embedded Chinese/English synthetic resumes and JDs; no source code, key or network needed",
+	"请提供一个新的样例目录，例如 resume-cli samples demo-inputs": "Provide a new sample directory, for example resume-cli samples demo-inputs",
+	"样例目录已存在，请指定新目录；不会覆盖已有内容。":                      "Sample directory already exists. Choose a new directory; existing contents will not be overwritten.",
+	"已导出中英文样例到 %s\n":                                "Exported Chinese/English samples to %s\n",
+
 	"无法读取文件，请检查文件是否可用及读取权限。":                     "Cannot read the file. Check that it is accessible and you have read permission.",
 	"文件不存在，请检查路径和文件名。":                           "File not found. Check the path and filename.",
 	"没有读取权限，请调整文件或所在目录的权限。":                      "Permission denied. Check read permissions on the file and its parent directory.",
@@ -54,7 +60,7 @@ var english = map[string]string{
 	" <简历.pdf>": " <resume.pdf>",
 	"结果保存路径，如 result.json；不填则打印到终端":                   "Save the result to a path such as result.json; otherwise print to the terminal",
 	"允许覆盖 --output / --stats 指定的已有文件；不会覆盖输入":          "Allow overwriting existing --output / --stats files, never input files",
-	"不用 API key 演示；仅支持 testdata 中的合成简历和 JD":           "Demo without an API key; only supports synthetic resume/JD fixtures in testdata",
+	"不用 API key 演示；仅支持 samples 导出的合成简历和 JD":           "Demo without an API key; only supports synthetic resume/JD fixtures exported by samples",
 	"score 评语和面试问题的语言：zh 中文，en 英文":                    "Report comments and interview questions: zh (Chinese) or en (English)",
 	"AI 厂商（也可设 RESUME_AI_PROVIDER）；可选值见下方配置":          "AI provider (or set RESUME_AI_PROVIDER); supported values are listed below",
 	"模型型号，如 deepseek-flash（也可设 RESUME_AI_MODEL）":      "Model ID, e.g. deepseek-flash (or set RESUME_AI_MODEL)",

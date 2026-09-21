@@ -264,7 +264,7 @@ Score 是设计时考虑的方向；实际保留评测记录的组合原型使�
 2. **成本和速度没有形成足够的整体优势。** 加上事实提取、Jev 判断及报告生成后，未体现出值得增加一套依赖的稳定收益；DeepSeek、Gemini Flash 已能完成较低成本的单模型任务。
 3. **最终评分在测试中不够合理。** 事实提取遗漏、匹配状态与所选证据不一致，以及固定分值/权重，都会影响最终结果。结构合规不等于评分合理，继续修补中间约束还会增加复杂度。
 
-早期短合成集曾出现组合方案估算费用更低、规则通过率更高的结果，但那时单模型使用了更复杂的输出结构，不能直接与现在的全文输入、简洁报告比较。以上是我针对本任务端到端方案的取舍，不是对 Jev 所有用途的结论。历史数据见[单模型与组合方案评测](docs/evaluation-single-vs-hybrid-2026-09-20.md)；当前代码已移除 Jev 运行路径，不需要它的配置。
+早期短合成集曾出现组合方案估算费用更低、规则通过率更高的结果，但那时单模型使用了更复杂的输出结构，不能直接与现在的全文输入、简洁报告比较。以上是我针对本任务端到端方案的取舍，不是对 Jev 所有用途的结论。当前代码已移除 Jev 运行路径，不需要它的配置。
 
 ### 错误恢复与文件安全
 
@@ -302,7 +302,7 @@ internal/i18n/    locale 检测、消息目录和错误展示
 scripts/          合成数据生成与独立评测工具
 ```
 
-详细实现见 [架构文档](docs/architecture.md) 和 [全文提取设计](docs/extraction-design.md)。
+提取提示词与纠正逻辑见 [structure.go](internal/ai/structure.go)，评分提示词与输出约束见 [assessment.go](internal/ai/assessment.go)。
 
 ## 测试与调用成本
 
@@ -323,7 +323,9 @@ Go 测试使用内存 HTTP 替身，AI/CLI 测试默认禁止真实网络，不�
 
 DeepSeek、Gemini、Kimi Code 有有限真实调用记录，OpenAI/Claude 仅做过离线协议验证。旧评测使用过不同 prompt 和评分结构，不能把它们混算成当前版本的准确率或速度保证。
 
-`--stats` 的费用按供应商返回的 token 和代码中的费率估算；未知费用不当作零，Kimi Code 订阅不折算成按 token 美元账单。详见 [厂商与成本](docs/providers-and-cost.md)。真实评测需显式执行并配置对应 key，方法见 [评测协议](docs/evaluation.md)。
+`--stats` 的费用按供应商返回的 token 和代码中的费率估算；未知费用不当作零，Kimi Code 订阅不折算成按 token 美元账单。估算只覆盖已观察到的用量，重试可能增加费用，不代表最终账单。
+
+评测脚本默认只打印计划。真实评测需要显式传入 `--execute`，并设置对应的 key；单供应商使用 `RESUME_AI_API_KEY`，多供应商可用 `--env-dir <私有目录>` 指定各供应商配置。只有经过人工核对的报告才能用于讨论内容质量，不能仅凭 JSON 成功率判断准确率。
 
 ## Docker 使用方式
 
@@ -363,7 +365,7 @@ docker run --rm --user "$(id -u):$(id -g)" --env-file .env \
   resume-cli score /work/resume.pdf --jd /work/jd.txt --lang en
 ```
 
-Dockerfile 使用多阶段构建，镜像包含 CLI、Poppler、证书及合成样例，默认以非 root 用户运行。`make build` 只构建宿主机二进制；更新镜像需执行 `make docker-build`。镜像构建需要访问基础镜像、系统包和 Go 依赖源；最新构建验证状态见[开发记录](docs/development.md)。
+Dockerfile 使用多阶段构建，镜像包含 CLI、Poppler、证书及合成样例，默认以非 root 用户运行。`make build` 只构建宿主机二进制；更新镜像需执行 `make docker-build`。镜像构建需要访问基础镜像、系统包和 Go 依赖源。
 
 ## 已知限制与后续工作
 
@@ -373,4 +375,4 @@ Dockerfile 使用多阶段构建，镜像包含 CLI、Poppler、证书及合成�
 - 未验证 Windows、高并发批处理及 OpenAI/Claude 的真实调用。
 - 实现包含全部三个命令、文件输出、mock、JSON 修复、日志、中英文、资源配置、测试与构建脚本；[GitHub 公开仓库](https://github.com/BruceDu521/resume-cli)已发布，演示视频及外部提交待完成。
 
-历史实验保留在 `docs/evaluation-*.md` 与 `examples/history/`，仅用于查阅设计演进，不作为当前用法。第三方信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+第三方信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

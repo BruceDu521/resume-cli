@@ -1,5 +1,6 @@
 # The original assessment is confidential and must remain local.
 .local/
+/AGENTS.md
 
 # Credentials and local configuration
 .env

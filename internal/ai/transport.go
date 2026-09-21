@@ -123,6 +123,8 @@ func estimate(u *Usage, now time.Time) {
 	}
 	var ip, cp, op float64
 	switch u.Model {
+	case "jev-1.13.0":
+		ip, cp, op = .042, .042, 0
 	case "gemini-3.8-flash":
 		if !now.Before(time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)) {
 			return

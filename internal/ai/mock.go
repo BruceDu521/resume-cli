@@ -96,3 +96,8 @@ func (m Mock) Evaluate(ctx context.Context, d domain.Document, jd, lang string) 
 	r := report.Render(a, lang, true)
 	return c, j, v, r.Comment, r.Questions, nil
 }
+
+func (m Mock) Extract(ctx context.Context, d domain.Document) (domain.Resume, error) {
+	c, err := m.Candidate(ctx, d)
+	return c.Resume, err
+}

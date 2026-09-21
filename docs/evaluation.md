@@ -1,16 +1,16 @@
 # 单模型评测协议
 
-2026-09-21 起 CLI 只支持单模型。旧组合评测是历史记录，重现需检出对应历史提交，不能拿旧命令直接运行当前版本。
+当前默认单模型，runner显式 --pipeline jev 可选组合。旧评测结果仍属历史版本，不混算。当前重点验证单模型和全文信息提取。
 
 ## 比较内容
 
-所有模型使用相同本地 Poppler 文本、JSON 合同、来源范围规则及代码评分。比较字段遗漏/编造、引用准确性及充分性、要求遗漏/必需优先、逐项状态、报告文字、真实耗时及用量；不能只比较分数或 HTTP 成功。
+所有模型使用相同本地 Poppler 文本、JSON 合同、来源范围规则及代码评分。公开extract另用全文+ResumeSchema，不生成评分证据。比较字段遗漏/编造、引用准确性及充分性、要求遗漏/必需优先、逐项状态、报告文字、真实耗时及用量；不能只比较分数或 HTTP 成功。
 
 “整例规则通过”表示一例预设检查全部通过，一项不符即不通过；更高只代表更符合这套政策，不是客观招聘准确率。16 个既有合成案例已用于开发，无独立最终保留集。真实材料只作授权后的有限验证，不作为公开 fixture。
 
 ## 执行
 
-`scripts/evaluate.py` 默认 dry-run，不读取 key、不执行 CLI。当前路线为 deepseek、gemini、kimi_code、kimi、openai、mock，全部单模型。OpenAI 用户暂缓；不要因为 runner 支持就自动调用。
+`scripts/evaluate.py` 默认 dry-run，不读取 key、不执行 CLI。当前路线为 deepseek、gemini、kimi_code、kimi、openai、mock，默认全部单模型。显式 --pipeline jev 才组合；需要额外注入 TYPESAFE_API_KEY。OpenAI 用户暂缓；不要因为 runner 支持就自动调用。
 
 单供应商继承 `RESUME_AI_API_KEY`。多供应商必须显式提供 `--env-dir`，目录中为 `<provider>.env`，每文件只含该供应商的 `RESUME_AI_API_KEY=...`；不执行 shell，不自动加载项目 dotenv。文件应0600、目录0700、排除Git。Kimi Code key 只用于明确指定的 Code 路线。
 

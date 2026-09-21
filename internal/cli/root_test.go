@@ -156,7 +156,7 @@ func TestSingleModelNeedsOnlySelectedKey(t *testing.T) {
 	for _, provider := range []string{"deepseek", "gemini", "kimi", "openai"} {
 		var out, logs bytes.Buffer
 		cmd := New(&out, &logs, func(k string) string {
-			if strings.HasPrefix(k, "TYPESAFE_") || k == "RESUME_AI_PIPELINE" || k == "RESUME_JEV_MODEL" {
+			if strings.HasPrefix(k, "TYPESAFE_") {
 				t.Fatalf("removed configuration read: %s", k)
 			}
 			if k == "RESUME_AI_PROVIDER" {
@@ -202,5 +202,29 @@ func TestLegacyKeysDoNotSelectCredential(t *testing.T) {
 		if err == nil || err.Error() != "missing RESUME_AI_API_KEY" {
 			t.Fatalf("%s: %v", provider, err)
 		}
+	}
+}
+
+func TestDefaultAndOptionalJev(t *testing.T) {
+	cmd := New(&bytes.Buffer{}, &bytes.Buffer{}, func(string) string { return "" })
+	mode, _ := cmd.PersistentFlags().GetString("pipeline")
+	if mode != "single" {
+		t.Fatal("default should be single", mode)
+	}
+	for _, mode := range []string{"jev", "hybrid"} {
+		out, _, err := run("score", "../../testdata/resume-zh.pdf", "--jd", "../../testdata/jd.txt", "--pipeline", mode, "--mock")
+		if err != nil || !strings.Contains(out, `"overall_score": 83`) {
+			t.Fatal(mode, err)
+		}
+	}
+	cmd = New(&bytes.Buffer{}, &bytes.Buffer{}, func(k string) string {
+		if k == "RESUME_AI_API_KEY" {
+			return "fake"
+		}
+		return ""
+	})
+	cmd.SetArgs([]string{"score", "missing.pdf", "--jd", "../../testdata/jd.txt", "--provider", "deepseek", "--pipeline", "jev"})
+	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "TYPESAFE_API_KEY") {
+		t.Fatal(err)
 	}
 }

@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -61,6 +62,16 @@ func TestSourceFieldErrorsDoNotRevealValues(t *testing.T) {
 	c.Resume.Education = []Education{{GraduationTime: "2099-01"}}
 	err = c.Validate(NewDocument("Alice\n2099.01"))
 	if err == nil || !strings.Contains(err.Error(), "education[0].graduation_time") || strings.Contains(err.Error(), "2099") {
+		t.Fatal(err)
+	}
+}
+
+func TestFactsHaveNoArbitraryCountCap(t *testing.T) {
+	c := Candidate{Resume: Resume{Education: []Education{}, Skills: []string{}}, Facts: []Fact{}}
+	for i := 0; i < 65; i++ {
+		c.Facts = append(c.Facts, Fact{ID: fmt.Sprint(i), Category: "skill", BlockID: "b1", Quote: "Go"})
+	}
+	if err := c.Validate(NewDocument("Go")); err != nil {
 		t.Fatal(err)
 	}
 }

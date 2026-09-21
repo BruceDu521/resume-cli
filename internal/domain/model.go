@@ -51,6 +51,22 @@ type Resume struct {
 	Education []Education `json:"education"`
 	Skills    []string    `json:"skills"`
 }
+
+// Validate checks the public extraction contract, not semantic equivalence.
+// Skills may be normalized or inferred from described work; exact substring
+// matching is inappropriate for this public extraction task.
+func (r Resume) Validate() error {
+	if r.Education == nil || r.Skills == nil {
+		return errors.New("education and skills must be arrays")
+	}
+	for _, skill := range r.Skills {
+		if strings.TrimSpace(skill) == "" {
+			return errors.New("skills must not contain empty entries")
+		}
+	}
+	return nil
+}
+
 type Fact struct {
 	ID         string `json:"id"`
 	Category   string `json:"category"`
@@ -127,9 +143,6 @@ func (c Candidate) Validate(d Document) error {
 		if v.value != "" && !Contains(d.Text, v.value) {
 			return fmt.Errorf("candidate resume.%s is not supported by source text; copy its original spelling and date format", v.path)
 		}
-	}
-	if len(c.Facts) > 64 {
-		return errors.New("too many candidate facts (maximum 64)")
 	}
 	seen := map[string]bool{}
 	for _, f := range c.Facts {

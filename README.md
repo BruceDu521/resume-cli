@@ -22,22 +22,6 @@
 
 ## 安装与离线演示
 
-### 已拿到二进制
-
-使用与你的操作系统、CPU 架构匹配的 `resume-cli`，不需要安装 Go 或下载源码。**运行 PDF 命令仍需安装 Poppler**：macOS 执行 `brew install poppler`；Debian/Ubuntu 执行 `sudo apt-get install poppler-utils poppler-data`。也可使用下文自带 Poppler 的 Docker 镜像。
-
-中英文合成 PDF 和 JD 已通过 Go `embed` 编入二进制。即使当前目录没有源码或 `testdata`，也可以导出：
-
-```sh
-# 二进制放在当前目录时；如果已加入 PATH，可以省略 ./
-./resume-cli samples demo-inputs
-./resume-cli parse demo-inputs/resume-zh.pdf
-./resume-cli extract demo-inputs/resume-zh.pdf --mock
-./resume-cli score demo-inputs/resume-zh.pdf --jd demo-inputs/jd.txt --mock
-```
-
-`samples <新目录>` 不需要网络、key 或 Poppler，导出 `resume-zh.pdf`、`resume-en.pdf`、`jd.txt`、`jd-en.txt`。目标目录必须不存在，父目录必须存在；即使加 `--force` 也不会覆盖已有目录。
-
 ### 从源码构建
 
 构建需要 **Go 1.25.5 或更新的兼容版本**，运行 PDF 命令需要 Poppler。在仓库根目录执行：

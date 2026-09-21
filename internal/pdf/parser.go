@@ -16,7 +16,8 @@ import (
 	"resume-cli/internal/i18n"
 )
 
-const MaxPDFBytes = 20 << 20
+// Image-heavy resumes can be large; extracted text has a separate AI-input limit.
+const MaxPDFBytes = 100 << 20
 const MaxTextBytes = 160 << 10
 
 type Parser struct{ Binary string }

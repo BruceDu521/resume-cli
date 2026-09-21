@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"resume-cli/internal/pdf"
 )
 
 func TestFriendlyInputErrorsBeforeCredentials(t *testing.T) {
@@ -26,7 +28,7 @@ func TestFriendlyInputErrorsBeforeCredentials(t *testing.T) {
 	invalid := write("encoding.txt", []byte{0xff, 0xfe})
 	bigJD := write("big.txt", bytes.Repeat([]byte("a"), (64<<10)+1))
 	bigPDF := write("big.pdf", nil)
-	if err := os.Truncate(bigPDF, (20<<20)+1); err != nil {
+	if err := os.Truncate(bigPDF, pdf.MaxPDFBytes+1); err != nil {
 		t.Fatal(err)
 	}
 	resume := "../../testdata/resume-en.pdf"

@@ -35,7 +35,7 @@ AI 配置（extract / score 使用；parse 和 --mock 不需要密钥）：
 zh 开头使用中文，其他语言或未设置时使用英文；可设 RESUME_CLI_LANG=zh 或 en。
 报告语言独立：默认中文，仅由 --lang en 切换为英文。
 
-输入边界：PDF 20 MiB；提取文本 160 KiB；JD 64 KiB（UTF-8 字节数，不是字符数）。
+输入边界：PDF 100 MiB；提取文本 160 KiB；JD 64 KiB（UTF-8 字节数，不是字符数）。
 超限会报错，不会截断；不限制技能或岗位要求的条数。
 {{if .HasAvailableSubCommands}}
 运行 resume-cli <命令> --help 查看该命令的用法和示例。
@@ -74,7 +74,7 @@ Locales starting with zh use Chinese; other/unset locales use English.
 Override with RESUME_CLI_LANG=zh or en.
 Report language is independent: Chinese by default; use --lang en for English.
 
-Input limits: PDF 20 MiB; extracted text 160 KiB; JD 64 KiB (UTF-8 bytes, not characters).
+Input limits: PDF 100 MiB; extracted text 160 KiB; JD 64 KiB (UTF-8 bytes, not characters).
 Oversized input is rejected, never truncated. No limits on skill/requirement counts.
 {{if .HasAvailableSubCommands}}
 Run resume-cli <command> --help for command-specific usage and examples.

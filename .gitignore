@@ -15,6 +15,7 @@ private-outputs/
 /jd.txt
 /jd.empty
 /result.json
+/docker-score.json
 
 # Build artifacts
 /bin/

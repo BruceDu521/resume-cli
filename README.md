@@ -327,33 +327,43 @@ DeepSeek、Gemini、Kimi Code 有有限真实调用记录，OpenAI/Claude 仅做
 
 ## Docker 使用方式
 
-Dockerfile 是镜像构建说明，`make build` 不会构建镜像。安装并启动 Docker 后，在仓库根目录执行：
+推荐使用 Makefile 的快捷命令。安装并启动 Docker 后，在仓库根目录执行，不需要在宿主机安装 Go 或 Poppler：
 
 ```sh
-# 构建包含 CLI、Poppler、证书及合成样例的镜像
-# 修改代码后需重新执行此命令
-docker build -t resume-cli .
-
-# 查看帮助；镜像 ENTRYPOINT 已是 resume-cli，后面直接写子命令
-docker run --rm resume-cli --help
-
-# 禁网演示，无需 API key，也无需在宿主机安装 Go 或 Poppler
-docker run --rm --network none resume-cli score /examples/resume-zh.pdf \
-  --jd /examples/jd.txt --mock
+make docker-build       # 首次使用或修改代码后，构建镜像
+make docker-demo        # 无 key、禁网的合成样例演示
 ```
 
-真实调用示例（macOS/Linux shell）：先把 `resume.pdf` 和 UTF-8 `jd.txt` 放进当前目录的 `input/`，在 `.env` 中填写 `RESUME_AI_PROVIDER`、`RESUME_AI_API_KEY` 等 `KEY=value` 配置，再执行：
+**处理自己的简历**：把 `resume.pdf`、UTF-8 的 `jd.txt` 和填写好的 `.env` 放在仓库根目录，直接执行：
 
 ```sh
-docker run --rm --user "$(id -u):$(id -g)" \
-  --env-file .env \
-  -v "$PWD/input:/input:ro" \
-  resume-cli score /input/resume.pdf --jd /input/jd.txt > result.json
+make docker-parse       # 本地解析，不需要 .env 或网络
+make docker-extract     # AI 提取，需要 .env
+make docker-score       # AI 评分，需要 .env 和 jd.txt
 ```
 
-`/input` 是容器里的只读路径；`> result.json` 由宿主机 shell 保存结果，日志仍显示在 stderr。重定向会覆盖宿主机同名文件，请使用新的结果文件名；若使用容器内的 `--output`，应另挂载可写输出目录，否则 `--rm` 会连同容器一起删除结果。`.env` 只在运行时通过 `--env-file` 传入，不打包进镜像。
+这些命令自动完成文件只读挂载、当前用户 UID/GID 设置和环境配置传入。`.env` 使用 `KEY=value` 格式，配置 `RESUME_AI_PROVIDER`、`RESUME_AI_API_KEY` 等变量；不要写 `export`。无需手动 source，也不会把 `.env` 打包进镜像。
 
-镜像使用多阶段构建，默认以非 root 用户运行；真实输入示例用当前用户 UID/GID 读取其文件。构建需要访问基础镜像、系统包源和 Go 依赖源；真实 AI 调用需要网络，mock 运行可禁网。最新镜像的构建验证状态见[开发记录](docs/development.md)。
+**容器不会自动看到电脑上的文件。** 只执行 `docker run ... extract ./resume.pdf` 时，查找的是容器内的路径。`--network none` 适用于 `parse` 或 `--mock`，真实 AI 提取与评分需要网络，快捷命令已分别处理。
+
+如需保存结果，使用新的文件名：
+
+```sh
+make docker-score > docker-score.json
+```
+
+结果由宿主机 shell 保存，日志仍显示在 stderr；重定向会覆盖同名文件。快捷命令不会把命令本身混入 JSON 输出。
+
+需要自定义输入路径或 CLI 参数时，可直接运行 Docker，例如：
+
+```sh
+docker run --rm --user "$(id -u):$(id -g)" --env-file .env \
+  --mount "type=bind,src=$PWD/resume.pdf,dst=/work/resume.pdf,readonly" \
+  --mount "type=bind,src=$PWD/jd.txt,dst=/work/jd.txt,readonly" \
+  resume-cli score /work/resume.pdf --jd /work/jd.txt --lang en
+```
+
+Dockerfile 使用多阶段构建，镜像包含 CLI、Poppler、证书及合成样例，默认以非 root 用户运行。`make build` 只构建宿主机二进制；更新镜像需执行 `make docker-build`。镜像构建需要访问基础镜像、系统包和 Go 依赖源；最新构建验证状态见[开发记录](docs/development.md)。
 
 ## 已知限制与后续工作
 
@@ -361,6 +371,6 @@ docker run --rm --user "$(id -u):$(id -g)" \
 - 没有按模型精确计算上下文 token，也没有确定性的任职时间合并或技术使用年限推导。
 - 提取可能遗漏或过度归纳；评分与评语有随机性，需人工检查。有限样本和结构校验不能证明招聘判断准确。
 - 未验证 Windows、高并发批处理及 OpenAI/Claude 的真实调用。
-- 实现包含全部三个命令、文件输出、mock、JSON 修复、日志、中英文、资源配置、测试与构建脚本；公开仓库发布、演示视频及外部提交尚未完成。
+- 实现包含全部三个命令、文件输出、mock、JSON 修复、日志、中英文、资源配置、测试与构建脚本；[GitHub 公开仓库](https://github.com/BruceDu521/resume-cli)已发布，演示视频及外部提交待完成。
 
 历史实验保留在 `docs/evaluation-*.md` 与 `examples/history/`，仅用于查阅设计演进，不作为当前用法。第三方信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

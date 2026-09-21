@@ -3,6 +3,7 @@ package fileio
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -49,5 +50,26 @@ func TestText(t *testing.T) {
 	s, e := Text(p, 100)
 	if e != nil || s != "你好" {
 		t.Fatal(s, e)
+	}
+}
+
+func TestUTF8ByteLimitBoundary(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "jd.txt")
+	// Exactly 64 KiB with multibyte Chinese text: count bytes, not characters.
+	data := []byte(strings.Repeat("中", (64<<10)/3) + "x")
+	if len(data) != 64<<10 {
+		t.Fatal(len(data))
+	}
+	if err := os.WriteFile(p, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Text(p, 64<<10); err != nil {
+		t.Fatal("boundary rejected", err)
+	}
+	if err := os.WriteFile(p, append(data, 'x'), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Text(p, 64<<10); err == nil {
+		t.Fatal("over-limit input accepted")
 	}
 }

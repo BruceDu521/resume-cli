@@ -12,6 +12,8 @@ import (
 
 	"resume-cli/internal/domain"
 	"resume-cli/internal/fileio"
+
+	"resume-cli/internal/i18n"
 )
 
 const MaxPDFBytes = 20 << 20
@@ -58,10 +60,10 @@ func (p Parser) Parse(ctx context.Context, path string) (doc domain.Document, re
 		return domain.Document{}, err
 	}
 	if len(data) == 0 {
-		return doc, errors.New("文件为空，请提供包含文字内容的 PDF 简历。")
+		return doc, i18n.New("文件为空，请提供包含文字内容的 PDF 简历。")
 	}
 	if !bytes.HasPrefix(data, []byte("%PDF-")) {
-		return domain.Document{}, errors.New("文件不是 PDF，请提供有效的 PDF 简历；修改扩展名不能转换格式。")
+		return domain.Document{}, i18n.New("文件不是 PDF，请提供有效的 PDF 简历；修改扩展名不能转换格式。")
 	}
 	// Copy bounded bytes into a private file, avoiding path/option injection and TOCTOU.
 	f, err := os.CreateTemp("", "resume-cli-*.pdf")
@@ -90,10 +92,10 @@ func (p Parser) Parse(ctx context.Context, path string) (doc domain.Document, re
 		}
 		var ex *exec.Error
 		if errors.As(err, &ex) || errors.Is(err, os.ErrNotExist) {
-			return domain.Document{}, errors.New("找不到 PDF 解析工具 pdftotext。macOS 请运行 brew install poppler；Debian/Ubuntu 请安装 poppler-utils 和 poppler-data。")
+			return domain.Document{}, i18n.New("找不到 PDF 解析工具 pdftotext。macOS 请运行 brew install poppler；Debian/Ubuntu 请安装 poppler-utils 和 poppler-data。")
 		}
 		if output.exceeded {
-			return doc, errors.New("PDF 提取文本超过 160 KiB 上限，请减少页数或无关内容后重试。")
+			return doc, i18n.New("PDF 提取文本超过 160 KiB 上限，请减少页数或无关内容后重试。")
 		}
 		reason := "PDF 无法解析，可能已损坏或格式不受支持；请确认能正常打开，并重新导出 PDF。"
 		if strings.Contains(strings.ToLower(stderr.String()), "password") || strings.Contains(strings.ToLower(stderr.String()), "encrypted") {
@@ -103,13 +105,13 @@ func (p Parser) Parse(ctx context.Context, path string) (doc domain.Document, re
 	}
 	text := output.String()
 	if strings.Contains(stderr.String(), "Missing language pack") {
-		return domain.Document{}, errors.New("缺少 PDF 字符映射数据，请安装 poppler-data 后重试。")
+		return domain.Document{}, i18n.New("缺少 PDF 字符映射数据，请安装 poppler-data 后重试。")
 	}
 	if !utf8.ValidString(text) {
-		return domain.Document{}, errors.New("PDF 提取文本编码异常，请重新导出 PDF 后重试。")
+		return domain.Document{}, i18n.New("PDF 提取文本编码异常，请重新导出 PDF 后重试。")
 	}
 	if strings.TrimSpace(text) == "" {
-		return domain.Document{}, errors.New("PDF 中没有可提取的文字；若为扫描件或图片，请先进行 OCR 文字识别后重试（本工具不含 OCR）。")
+		return domain.Document{}, i18n.New("PDF 中没有可提取的文字；若为扫描件或图片，请先进行 OCR 文字识别后重试（本工具不含 OCR）。")
 	}
 	return domain.NewDocument(text), nil
 }

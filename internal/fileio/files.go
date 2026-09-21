@@ -1,7 +1,6 @@
 package fileio
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -18,7 +17,7 @@ func Read(path string, limit int64) ([]byte, error) {
 		return nil, &Error{Path: path, Message: "路径不是普通文件，请提供文件路径，不要使用目录或设备。"}
 	}
 	if info.Size() > limit {
-		return nil, &Error{Path: path, Message: fmt.Sprintf("文件过大（上限 %d 字节），请缩小文件后重试。", limit)}
+		return nil, &Error{Path: path, Message: "文件过大（上限 %d 字节），请缩小文件后重试。", Args: []any{limit}}
 	}
 	f, err := os.Open(path)
 	if err != nil {
@@ -30,7 +29,7 @@ func Read(path string, limit int64) ([]byte, error) {
 		return nil, ReadError(path, err)
 	}
 	if int64(len(b)) > limit {
-		return nil, &Error{Path: path, Message: fmt.Sprintf("文件过大（上限 %d 字节），请缩小文件后重试。", limit)}
+		return nil, &Error{Path: path, Message: "文件过大（上限 %d 字节），请缩小文件后重试。", Args: []any{limit}}
 	}
 	return b, nil
 }

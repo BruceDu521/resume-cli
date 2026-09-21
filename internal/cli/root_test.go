@@ -25,7 +25,12 @@ func TestMain(m *testing.M) {
 }
 func run(args ...string) (string, string, error) {
 	var out, logs bytes.Buffer
-	cmd := New(&out, &logs, func(string) string { return "" })
+	cmd := New(&out, &logs, func(key string) string {
+		if key == "RESUME_CLI_LANG" {
+			return "zh"
+		}
+		return ""
+	})
 	cmd.SetArgs(args)
 	e := cmd.ExecuteContext(context.Background())
 	return out.String(), logs.String(), e

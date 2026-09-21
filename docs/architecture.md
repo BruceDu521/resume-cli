@@ -20,6 +20,7 @@
 | internal/domain | Document、Resume、提取字段校验 |
 | internal/pdf | 本地 Poppler、文件与文本限制、取消 |
 | internal/ai | 提示词/schema、五个供应商适配器、mock、HTTP、用量 |
+| internal/i18n | 运行时界面语言检测、消息目录、错误渲染；独立于报告语言 |
 | internal/report | Evaluation 与最终报告、分数和报告校验 |
 | internal/cache | extract 显式私有缓存 |
 | internal/fileio / jsonutil | 有界输入、原子输出、有限 JSON 修复 |

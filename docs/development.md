@@ -28,3 +28,9 @@ extract 使用完整文本 + ResumeSchema。score 使用完整文本 + JD，直�
 常见文件错误使用 fileio.Error：对外显示中文原因与操作建议，Unwrap 保留底层 cause 供 errors.Is/As 使用。PDF 错误带简历角色，JD 错误带岗位描述角色；不打印 Poppler stderr/临时路径。CLI 在读取 key 前验证本地输入，并复用解析结果避免重复运行 Poppler。帮助页补齐命令介绍、例子、所有配置变量与优先级，禁用默认 completion。
 
 bounded 使用命名 buffer 而非嵌入 bytes.Buffer，避免 io.Copy 通过继承的 ReadFrom 绕过 Write 大小限制。离线测试覆盖真实子进程超限、损坏/加密/无文字、错误链保留及常见 CLI 输入失败。
+
+## 运行时界面语言（2026-09-21）
+
+界面语言优先级 RESUME_CLI_LANG > LC_ALL > LC_MESSAGES > LANG，首个非空值为中文 locale 时用 zh，否则含 C/POSIX、未设置与不支持的语言统一回退 en。帮助和常见用户输入错误双语；底层技术诊断与日志保留英文。报告仍独立默认 zh，--lang en 切换英文。无编译开关或全局可变语言状态。
+
+i18n 使用完整消息目录和带参数的错误对象，终端出口渲染；不在格式化后的报错中搜索替换中文，避免改变文件名。errors.Is/As 原因链保留。离线回归覆盖 locale 优先级、中英文帮助/错误、界面与报告语言四种组合、JD 64 KiB UTF-8 字节边界。

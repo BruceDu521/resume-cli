@@ -9,6 +9,8 @@ import (
 
 	"resume-cli/internal/domain"
 	"resume-cli/internal/fileio"
+
+	"resume-cli/internal/i18n"
 )
 
 type Store struct {
@@ -69,7 +71,7 @@ func (s Store) Put(key string, v any) error {
 		return fileio.WriteError(s.Dir, e)
 	}
 	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return errors.New("缓存路径必须是目录，且不能是符号链接")
+		return i18n.New("缓存路径必须是目录，且不能是符号链接")
 	}
 	data, e := json.Marshal(v)
 	if e != nil {

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+
+	"resume-cli/internal/i18n"
 )
 
 // Error presents a useful message without exposing OS operations or temporary
@@ -11,10 +13,22 @@ import (
 type Error struct {
 	Path    string
 	Message string
+	Args    []any
 	Cause   error
 }
 
-func (e *Error) Error() string { return fmt.Sprintf("%q：%s", e.Path, e.Message) }
+func (e *Error) Error() string { return e.Localize("zh") }
+func (e *Error) Localize(lang string) string {
+	separator := "："
+	if lang == "en" {
+		separator = ": "
+	}
+	message := i18n.Text(lang, e.Message)
+	if len(e.Args) > 0 {
+		message = fmt.Sprintf(message, e.Args...)
+	}
+	return fmt.Sprintf("%q%s%s", e.Path, separator, message)
+}
 func (e *Error) Unwrap() error { return e.Cause }
 
 func ReadError(path string, err error) error {

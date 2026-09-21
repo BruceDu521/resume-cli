@@ -33,3 +33,17 @@ func TestFriendlyErrorsPreserveCauses(t *testing.T) {
 		}
 	}
 }
+
+func TestEnglishFileErrorsPreserveFilename(t *testing.T) {
+	path := "文件不存在，请检查路径和文件名。.pdf"
+	err := ReadError(path, os.ErrNotExist)
+	e := err.(*Error)
+	got := e.Localize("en")
+	if !strings.Contains(got, path) || !strings.Contains(got, "File not found") {
+		t.Fatal(got)
+	}
+	e = &Error{Path: "large.pdf", Message: "文件过大（上限 %d 字节），请缩小文件后重试。", Args: []any{64 << 10}}
+	if got = e.Localize("en"); !strings.Contains(got, "65536 bytes") {
+		t.Fatal(got)
+	}
+}

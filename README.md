@@ -43,6 +43,7 @@ set +a
 | `RESUME_AI_API_KEY` | 所选供应商的唯一密钥；更换供应商时同步更换 |
 | `RESUME_AI_MODEL` | 可选模型 ID 覆盖 |
 | `RESUME_AI_BASE_URL` | 可选 HTTPS API 地址覆盖，禁止重定向 |
+| `RESUME_CLI_LANG` | 可选：`zh` / `en`，覆盖界面语言，不改变报告语言 |
 | `RESUME_LOG_LEVEL` | debug / info / warn / error，默认 info |
 
 模型预设为 DeepSeek `deepseek-flash`、Gemini `gemini-3.8-flash`、Kimi 开放平台 `kimi-k3`、OpenAI `gpt-6-astra`、Claude `claude-sonnet-5`。Kimi Code 订阅使用 `k3` 和独立端点，不能混用开放平台 key：
@@ -92,7 +93,7 @@ bin/resume-cli score resume.pdf --jd jd.txt --provider deepseek --lang en
 
 `resume-cli --help` 列出命令用途、参数示例及环境变量；`resume-cli score --help` 提供评分命令示例。`completion` 是 CLI 框架附带的 Shell 补全脚本生成功能，本项目不提供该命令。
 
-先检查简历和 JD，再配置或调用 AI。常见输入错误给出中文说明和处理建议，写入 stderr，退出码为 1，stdout 不混入错误信息：
+先检查简历和 JD，再配置或调用 AI。常见输入错误根据运行环境显示中英文说明和处理建议，写入 stderr，退出码为 1，stdout 不混入错误信息：
 
 ```text
 resume-cli: 岗位描述（JD）："jd.none"：文件不存在，请检查路径和文件名。
@@ -102,7 +103,18 @@ resume-cli: 简历 PDF："resume.pdf"：PDF 无法解析，可能已损坏或格
 
 还会检查目录误用、读取权限、非 PDF、空 PDF、加密文件、扫描件无文本、UTF-8 编码、文件/文本大小及解析工具缺失。JD 必须是纯文本，PDF 需先转为文本。输出目录不存在、无写入权限或已有文件也会给出提示。常见文件错误不会直接显示 `stat`、内部临时路径或子进程退出信息。
 
-帮助与常见输入错误固定为中文；`--lang en` 只切换评分报告的评语和面试问题语言。AI 请求和字段校验诊断仍保留具体原因。
+帮助与常见输入错误在运行时选择语言，不需要分别编译。优先级为 `RESUME_CLI_LANG` → `LC_ALL` → `LC_MESSAGES` → `LANG`（取首个非空值）；`zh_CN.UTF-8`、`zh_TW` 等中文 locale 显示中文，英文、C/POSIX、其他或未设置的 locale 显示英文。不会修改文件名、简历内容或 AI 输出；底层技术诊断和日志保持原有英文。
+
+```sh
+RESUME_CLI_LANG=en bin/resume-cli --help
+RESUME_CLI_LANG=zh bin/resume-cli extract missing.pdf
+# 英文界面，报告仍默认中文
+RESUME_CLI_LANG=en bin/resume-cli score resume.pdf --jd jd.txt
+# 中文界面，生成英文报告
+RESUME_CLI_LANG=zh bin/resume-cli score resume.pdf --jd jd.txt --lang en
+```
+
+界面语言与报告语言完全独立；报告始终默认中文，仅由 `--lang en` 切换。
 
 ## 示例输入与输出
 
@@ -160,7 +172,7 @@ docker run --rm --network none resume-cli score /examples/resume-zh.pdf \
 
 已实现三个命令、中英文、文件输出、mock、有限 JSON 修复、日志、Makefile 与 Dockerfile。JSON 修复仅处理完整代码围栏、BOM、字符串外尾逗号；不修造业务事实。拒绝重复键、null、未知字段以及过量输入。
 
-- PDF 上限 20 MiB、文本 160 KiB、JD 64 KiB；扫描件需要 OCR，当前不支持；不解锁加密 PDF。
+- PDF 上限 20 MiB、文本 160 KiB、JD 64 KiB（UTF-8 字节数，不是字符数或要求条数）；扫描件需要 OCR，当前不支持；不解锁加密 PDF。
 - 不自动纠正多栏阅读顺序或跨页页眉；完整文本传给模型，不按技能或 JD 条数截断。资源上限用于控制内存和请求开销，超限明确报错。
 - extract 校验 JSON 结构和空值约定，不用原文子串检查代替语义判断；因此不能保证模型提取没有遗漏或归纳错误。默认评分只做结构与范围校验，不能证明职责覆盖和评论语义准确。
 - 没有确定性任期合并、精确技能年限推导或批量招聘服务。不得把总工龄当技能年限。

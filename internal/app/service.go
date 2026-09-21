@@ -3,11 +3,12 @@ package app
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"resume-cli/internal/cache"
 	"resume-cli/internal/domain"
 	"resume-cli/internal/report"
+
+	"resume-cli/internal/i18n"
 )
 
 type Parser interface {
@@ -32,7 +33,7 @@ type Service struct {
 func (s Service) Parse(ctx context.Context, path string) (domain.Document, error) {
 	d, err := s.Parser.Parse(ctx, path)
 	if err != nil {
-		return d, fmt.Errorf("简历 PDF：%w", err)
+		return d, i18n.Errorf("简历 PDF：%w", err)
 	}
 	return d, nil
 }
@@ -45,7 +46,7 @@ func (s Service) Extract(ctx context.Context, path string) (domain.Resume, error
 	key := "resume:v1:" + s.Identity + ":" + d.Hash
 	hit, e := s.Cache.Get(key, &r)
 	if e != nil {
-		return r, fmt.Errorf("读取简历缓存失败：%w", e)
+		return r, i18n.Errorf("读取简历缓存失败：%w", e)
 	}
 	if hit && r.Validate() == nil {
 		if s.CacheHit != nil {
@@ -59,7 +60,7 @@ func (s Service) Extract(ctx context.Context, path string) (domain.Resume, error
 	}
 	if e == nil {
 		if err := s.Cache.Put(key, r); err != nil {
-			e = fmt.Errorf("保存简历缓存失败：%w", err)
+			e = i18n.Errorf("保存简历缓存失败：%w", err)
 		}
 	}
 	return r, e

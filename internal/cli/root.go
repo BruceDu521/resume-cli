@@ -25,6 +25,7 @@ import (
 )
 
 type options struct {
+	maxPDFMiB, maxTextKiB, maxJDKiB                             int64
 	output, jd, lang, provider, model, baseURL, cacheDir, stats string
 	mock, force                                                 bool
 	timeout                                                     time.Duration
@@ -85,6 +86,9 @@ func New(out, errOut io.Writer, getenv func(string) string) *cobra.Command {
 	f.StringVar(&o.cacheDir, "cache-dir", "", tr("仅 extract：缓存目录，如 .cache；24 小时内复用提取结果"))
 	f.StringVar(&o.stats, "stats", "", tr("统计文件路径，如 usage.json；记录耗时、token 和估算费用"))
 	f.DurationVar(&o.timeout, "timeout", 90*time.Second, tr("最多等待多久，如 90s 或 2m（上限 10m）"))
+	f.Int64Var(&o.maxPDFMiB, "max-pdf-mib", pdf.MaxPDFBytes>>20, tr("PDF 文件大小上限，单位 MiB，必须为正整数"))
+	f.Int64Var(&o.maxTextKiB, "max-text-kib", pdf.MaxTextBytes>>10, tr("PDF 提取文本上限，单位 KiB；超限报错，不截断"))
+	f.Int64Var(&o.maxJDKiB, "max-jd-kib", 64, tr("JD 文本上限，单位 KiB（UTF-8 字节），必须为正整数"))
 	for _, name := range []string{"parse", "extract", "score"} {
 		name := name
 		cmd := &cobra.Command{Use: name + tr(" <简历.pdf>"), Args: func(cmd *cobra.Command, args []string) error {
@@ -112,6 +116,18 @@ func New(out, errOut io.Writer, getenv func(string) string) *cobra.Command {
 		}
 		cmd.RunE = func(cmd *cobra.Command, args []string) (runErr error) {
 			start := time.Now()
+			pdfLimit, err := limitBytes(o.maxPDFMiB, 1<<20)
+			if err != nil {
+				return i18n.Errorf("%s: %w", "--max-pdf-mib", err)
+			}
+			textLimit, err := limitBytes(o.maxTextKiB, 1<<10)
+			if err != nil {
+				return i18n.Errorf("%s: %w", "--max-text-kib", err)
+			}
+			jdLimit, err := limitBytes(o.maxJDKiB, 1<<10)
+			if err != nil {
+				return i18n.Errorf("%s: %w", "--max-jd-kib", err)
+			}
 			if o.timeout <= 0 || o.timeout > 10*time.Minute {
 				return i18n.New("--timeout 必须大于 0 且不超过 10m，例如 90s 或 2m")
 			}
@@ -164,11 +180,10 @@ func New(out, errOut io.Writer, getenv func(string) string) *cobra.Command {
 			}()
 			ctx, cancel := context.WithTimeout(cmd.Context(), o.timeout)
 			defer cancel()
-			s := app.Service{Parser: pdf.Parser{}, Cache: cache.Store{Dir: o.cacheDir}, Mock: o.mock, CacheHit: rec.hit}
+			s := app.Service{Parser: pdf.Parser{MaxPDFBytes: pdfLimit, MaxTextBytes: int(textLimit)}, Cache: cache.Store{Dir: o.cacheDir}, Mock: o.mock, CacheHit: rec.hit}
 			var jd string
-			var err error
 			if name == "score" {
-				jd, err = fileio.Text(o.jd, 64<<10)
+				jd, err = fileio.Text(o.jd, jdLimit)
 				if err != nil {
 					return i18n.Errorf("岗位描述（JD）：%w", err)
 				}
@@ -314,4 +329,13 @@ type parsedInput struct{ document domain.Document }
 
 func (p parsedInput) Parse(ctx context.Context, _ string) (domain.Document, error) {
 	return p.document, ctx.Err()
+}
+
+// Leave one byte for the bounded reader's overflow probe. Check before multiplying.
+func limitBytes(value, unit int64) (int64, error) {
+	max := int64(^uint(0)>>1) - 1
+	if value <= 0 || value > max/unit {
+		return 0, i18n.New("资源上限必须是正数，且不能超过本机可表示的字节范围。")
+	}
+	return value * unit, nil
 }

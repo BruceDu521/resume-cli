@@ -39,9 +39,8 @@ func (r *Remote) Generate(ctx context.Context, q Request) ([]byte, Usage, error)
 	if e != nil {
 		return nil, u, e
 	}
-	if len(state) > 200<<10 {
-		return nil, u, errors.New("model input exceeds local serialized input budget (200 KiB); input was not truncated")
-	}
+	// Input resource limits are enforced at PDF/JD ingestion. A separate fixed
+	// serialized-byte limit would ignore user overrides and JSON escaping overhead.
 	if r.Provider == "anthropic" || r.Provider == "claude" {
 		return r.generateAnthropic(ctx, q, state, start)
 	}

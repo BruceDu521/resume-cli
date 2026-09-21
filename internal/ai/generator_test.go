@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -129,5 +130,31 @@ func TestKimiCodeDoesNotPretendSubscriptionIsPayPerToken(t *testing.T) {
 	_, u, err := r.Generate(context.Background(), Request{Schema: object(map[string]any{})})
 	if err != nil || !u.Known || u.CostUSD != nil || u.CostComplete || u.CostNote == "" {
 		t.Fatal(u, err)
+	}
+}
+
+func TestConfiguredLargeInputHasNoHiddenSerializedCap(t *testing.T) {
+	// Ingestion owns configurable byte limits. JSON escaping must not introduce
+	// an unrelated 200 KiB rejection in the shared provider adapter.
+	input := strings.Repeat("<", 70<<10)
+	called := false
+	r := Remote{Provider: "deepseek", Model: "model", Key: "synthetic", BaseURL: "https://example.invalid", HTTP: &Transport{Client: doFunc(func(req *http.Request) (*http.Response, error) {
+		called = true
+		var body struct {
+			Messages []struct {
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		var state string
+		if err := json.Unmarshal([]byte(body.Messages[len(body.Messages)-1].Content), &state); err != nil || state != input {
+			t.Fatal("input changed", err)
+		}
+		return response(200, `{"choices":[{"finish_reason":"stop","message":{"content":"{}"}}]}`), nil
+	})}}
+	if _, _, err := r.Generate(context.Background(), Request{State: input, Schema: object(map[string]any{})}); err != nil || !called {
+		t.Fatal(err)
 	}
 }

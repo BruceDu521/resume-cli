@@ -85,9 +85,19 @@ bin/resume-cli score resume.pdf --jd jd.txt --provider deepseek --lang en
 | `--provider` / `--model` / `--base-url` | 覆盖对应环境变量 |
 | `--cache-dir <dir>` | extract 使用的可选私有缓存，24 小时有效 |
 | `--stats <path>` | 保存成功及失败调用的耗时、token 和估算费用 |
+| `--max-pdf-mib <整数>` | PDF 文件上限，默认 100 MiB |
+| `--max-text-kib <整数>` | PDF 提取文本上限，默认 128 KiB |
+| `--max-jd-kib <整数>` | JD 文件上限，默认 64 KiB |
 | `--timeout <duration>` | 完整命令默认 90s，最多 10m |
 
 输出文件权限 0600，默认不可覆盖。stdout 只有结果，日志走 stderr；不记录 key、完整简历或模型原始响应。
+
+上限参数必须为正整数；1 MiB = 1,048,576 字节，1 KiB = 1,024 字节。超限报错，不截断。以 UTF-8 常见汉字每字 3 字节粗算，128 KiB 约 4.37 万汉字、64 KiB 约 2.18 万汉字；这不是 token 计数。默认值通常能留出较充足的模型上下文空间，但具体容量仍取决于 tokenizer、提示词及输出预算。调大本地限制不等于扩大模型上下文。
+
+```sh
+bin/resume-cli score resume.pdf --jd jd.txt \
+  --max-pdf-mib 200 --max-text-kib 256 --max-jd-kib 128
+```
 
 ## 帮助与常见错误
 
@@ -172,7 +182,7 @@ docker run --rm --network none resume-cli score /examples/resume-zh.pdf \
 
 已实现三个命令、中英文、文件输出、mock、有限 JSON 修复、日志、Makefile 与 Dockerfile。JSON 修复仅处理完整代码围栏、BOM、字符串外尾逗号；不修造业务事实。拒绝重复键、null、未知字段以及过量输入。
 
-- PDF 上限 100 MiB、文本 160 KiB、JD 64 KiB（UTF-8 字节数，不是字符数或要求条数）；扫描件需要 OCR，当前不支持；不解锁加密 PDF。
+- PDF 上限 100 MiB、文本 128 KiB、JD 64 KiB（UTF-8 字节数，不是字符数或要求条数）；扫描件需要 OCR，当前不支持；不解锁加密 PDF。
 - 不自动纠正多栏阅读顺序或跨页页眉；完整文本传给模型，不按技能或 JD 条数截断。资源上限用于控制内存和请求开销，超限明确报错。
 - extract 校验 JSON 结构和空值约定，不用原文子串检查代替语义判断；因此不能保证模型提取没有遗漏或归纳错误。默认评分只做结构与范围校验，不能证明职责覆盖和评论语义准确。
 - 没有确定性任期合并、精确技能年限推导或批量招聘服务。不得把总工龄当技能年限。

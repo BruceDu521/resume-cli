@@ -18,9 +18,14 @@ import (
 
 // Image-heavy resumes can be large; extracted text has a separate AI-input limit.
 const MaxPDFBytes = 100 << 20
-const MaxTextBytes = 160 << 10
+const MaxTextBytes = 128 << 10
 
-type Parser struct{ Binary string }
+type Parser struct {
+	Binary string
+	// Zero uses the default; negative limits are invalid.
+	MaxPDFBytes  int64
+	MaxTextBytes int
+}
 type bounded struct {
 	buffer   bytes.Buffer
 	limit    int
@@ -56,7 +61,17 @@ func (p Parser) Parse(ctx context.Context, path string) (doc domain.Document, re
 	if err := ctx.Err(); err != nil {
 		return doc, err
 	}
-	data, err := fileio.Read(path, MaxPDFBytes)
+	pdfLimit, textLimit := p.MaxPDFBytes, p.MaxTextBytes
+	if pdfLimit == 0 {
+		pdfLimit = MaxPDFBytes
+	}
+	if textLimit == 0 {
+		textLimit = MaxTextBytes
+	}
+	if pdfLimit < 0 || textLimit < 0 || pdfLimit > int64(^uint(0)>>1)-1 {
+		return doc, i18n.New("资源上限必须是正数，且不能超过本机可表示的字节范围。")
+	}
+	data, err := fileio.Read(path, pdfLimit)
 	if err != nil {
 		return domain.Document{}, err
 	}
@@ -84,7 +99,7 @@ func (p Parser) Parse(ctx context.Context, path string) (doc domain.Document, re
 		bin = "pdftotext"
 	}
 	cmd := exec.CommandContext(ctx, bin, "-enc", "UTF-8", f.Name(), "-")
-	output, stderr := &bounded{limit: MaxTextBytes}, &bounded{limit: 16 << 10}
+	output, stderr := &bounded{limit: textLimit}, &bounded{limit: 16 << 10}
 	cmd.Stdout = output
 	cmd.Stderr = stderr
 	if err = cmd.Run(); err != nil {
@@ -96,7 +111,7 @@ func (p Parser) Parse(ctx context.Context, path string) (doc domain.Document, re
 			return domain.Document{}, i18n.New("找不到 PDF 解析工具 pdftotext。macOS 请运行 brew install poppler；Debian/Ubuntu 请安装 poppler-utils 和 poppler-data。")
 		}
 		if output.exceeded {
-			return doc, i18n.New("PDF 提取文本超过 160 KiB 上限，请减少页数或无关内容后重试。")
+			return doc, &fileio.Error{Path: path, Message: "PDF 提取文本超过 %d 字节上限；请减少内容或调大 --max-text-kib 后重试。", Args: []any{textLimit}}
 		}
 		reason := "PDF 无法解析，可能已损坏或格式不受支持；请确认能正常打开，并重新导出 PDF。"
 		if strings.Contains(strings.ToLower(stderr.String()), "password") || strings.Contains(strings.ToLower(stderr.String()), "encrypted") {

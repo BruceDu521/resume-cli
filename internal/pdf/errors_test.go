@@ -14,7 +14,7 @@ func TestParserFailuresHideProcessDetails(t *testing.T) {
 		{"broken", "printf 'Syntax Error private-provider-detail' >&2; exit 1", "无法解析"},
 		{"empty", "exit 0", "没有可提取的文字"},
 		{"mapping", "printf 'Missing language pack' >&2; printf 'text'", "poppler-data"},
-		{"text limit", "head -c 170000 /dev/zero", "131072"},
+		{"text limit", "head -c 170000 /dev/zero", "65536"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			bin := filepath.Join(t.TempDir(), "fake-pdftotext")
@@ -63,5 +63,14 @@ func TestConfiguredInputLimits(t *testing.T) {
 	p.MaxTextBytes = 16
 	if d, err := p.Parse(context.Background(), source); err != nil || d.Text != "12345678" {
 		t.Fatal(d, err)
+	}
+}
+
+func TestParserHardLimits(t *testing.T) {
+	for _, p := range []Parser{{MaxPDFBytes: MaxPDFBytes + 1}, {MaxTextBytes: MaxTextBytes + 1}} {
+		_, err := p.Parse(context.Background(), "missing.pdf")
+		if err == nil || !strings.Contains(err.Error(), "不能超过") {
+			t.Fatal(err)
+		}
 	}
 }

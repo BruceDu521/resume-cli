@@ -35,8 +35,9 @@ AI 配置（extract / score 使用；parse 和 --mock 不需要密钥）：
 zh 开头使用中文，其他语言或未设置时使用英文；可设 RESUME_CLI_LANG=zh 或 en。
 报告语言独立：默认中文，仅由 --lang en 切换为英文。
 
-默认输入边界（可用 --max-pdf-mib / --max-text-kib / --max-jd-kib 调整）：PDF 100 MiB；提取文本 128 KiB；JD 64 KiB（UTF-8 字节数，不是字符数）。
-超限会报错，不会截断；不限制技能或岗位要求的条数。
+默认输入边界（可用 --max-pdf-mib / --max-text-kib / --max-jd-kib 调整）：PDF 32 MiB；提取文本 64 KiB；JD 32 KiB（UTF-8 字节数，不是字符数）。
+参数必须为正整数，最大分别为 200 MiB / 256 KiB / 128 KiB。
+输入超过所设上限会报错，不会截断；不限制技能或岗位要求的条数。
 {{if .HasAvailableSubCommands}}
 运行 resume-cli <命令> --help 查看该命令的用法和示例。
 {{end}}`
@@ -74,7 +75,8 @@ Locales starting with zh use Chinese; other/unset locales use English.
 Override with RESUME_CLI_LANG=zh or en.
 Report language is independent: Chinese by default; use --lang en for English.
 
-Default limits (override with --max-pdf-mib / --max-text-kib / --max-jd-kib): PDF 100 MiB; extracted text 128 KiB; JD 64 KiB (UTF-8 bytes, not characters).
+Default limits (override with --max-pdf-mib / --max-text-kib / --max-jd-kib): PDF 32 MiB; extracted text 64 KiB; JD 32 KiB (UTF-8 bytes, not characters).
+Options must be positive integers; maximum values are 200 MiB / 256 KiB / 128 KiB.
 Oversized input is rejected, never truncated. No limits on skill/requirement counts.
 {{if .HasAvailableSubCommands}}
 Run resume-cli <command> --help for command-specific usage and examples.

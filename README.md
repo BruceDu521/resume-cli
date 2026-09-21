@@ -1,192 +1,304 @@
 # resume-cli
 
-用 Go 编写的 PDF 简历解析与岗位匹配 CLI。PDF 在本地由 Poppler 提取文本；`extract` 和 `score` 各调用一个所选模型，输出经过校验的 JSON。默认中文，支持英文报告。
+用 Go 编写的 PDF 简历解析与岗位匹配工具。支持本地提取 PDF 文本、用 AI 整理简历信息，以及结合岗位描述生成匹配评分、评语和面试问题。可以不配置 API key，直接用随附样例离线演示。
 
-当前使用单模型评分。普通 `extract` 始终只做全文信息提取。支持 DeepSeek、Gemini、Kimi、OpenAI 和 Anthropic（Claude）；OpenAI/Claude 通过离线协议测试，尚无真实 key 实测。历史对照结果保留，不代表当前版本的性能。当前提取设计与验证见 [全文提取说明](docs/extraction-design.md)。
+## 需求理解与实现范围
 
-## 安装与演示
+将任务拆成三个可独立运行的命令：
 
-依赖 Go 1.25.5 或更新兼容版本、Poppler（Linux 还需要 poppler-data）。
+| 命令 | 输入 | 输出 | 是否调用 AI |
+| --- | --- | --- | --- |
+| `parse` | 本地 PDF 简历 | 提取的纯文本 | 否 |
+| `extract` | 本地 PDF 简历 | 姓名、联系方式、城市、教育经历、技能 JSON | 是；mock 除外 |
+| `score` | 本地 PDF 简历 + UTF-8 JD 文本 | 四项匹配分数、评语、面试问题 JSON | 是；mock 除外 |
+
+实现范围还包括文件输出、无 key 演示、常见 JSON 格式修复、日志、Makefile/Dockerfile、输入异常处理和离线测试。工具关注单份简历的处理闭环，不包含招聘管理系统、数据库或 Web 服务。
+
+评分用于辅助人工阅读：它是模型对“简历所述经历与岗位要求”的评价，不是对候选人真实能力的客观测量。缺少描述不等于缺少能力；JSON 校验通过也不意味着内容完全准确。
+
+## 快速开始：无需 API key
+
+依赖 **Go 1.25.5 或更新的兼容版本**、**Poppler**（`pdftotext`）；Linux 建议同时安装 `poppler-data`。
 
 ```sh
-# macOS
+# 在仓库根目录执行；macOS 安装依赖
 brew install go poppler
-# Debian / Ubuntu
+# Debian / Ubuntu 安装 PDF 工具；Go 需另行安装对应版本
 # sudo apt-get install poppler-utils poppler-data
-make build
-bin/resume-cli --help
 
-# 以下命令不需要 API key
-bin/resume-cli parse testdata/resume-zh.pdf
-bin/resume-cli extract testdata/resume-zh.pdf --mock
-bin/resume-cli score testdata/resume-zh.pdf --jd testdata/jd.txt --mock
+make build
+./bin/resume-cli --help
+
+./bin/resume-cli parse testdata/resume-zh.pdf
+./bin/resume-cli extract testdata/resume-zh.pdf --mock
+./bin/resume-cli score testdata/resume-zh.pdf --jd testdata/jd.txt --mock
 ```
 
-mock 只识别随项目提供的中英文合成简历及对应 JD；输出 `mock: true`，不会伪装成对任意真实简历的分析。
+也可以运行 `make demo`，依次演示三个命令。首次构建需要下载 Go 模块；演示本身不访问 AI API。
 
-## 配置
+`--mock` 仅用于项目随附的中英文合成简历与对应 JD，返回固定演示内容，不支持任意真实简历推断。score 的 JSON 含 `mock: true`；extract 保持规定的字段结构，mock 提示写入 stderr。
 
-复制 `.env.example` 并填入所选供应商的 key。CLI 不自动读取 dotenv；自行通过可信 shell 或运行环境注入。不要将密钥放进命令行参数。
+## 配置真实模型
+
+复制配置模板，填写一个供应商的 key，然后加载配置：
 
 ```sh
 cp -n .env.example .env
 chmod 600 .env
-# 编辑后加载自己创建的配置
+# 编辑 .env，填入所选供应商的 key，再加载自己创建的文件
 set -a
 . ./.env
 set +a
+
+./bin/resume-cli extract resume.pdf --output resume.json
+./bin/resume-cli score resume.pdf --jd jd.txt --output result.json --stats usage.json
 ```
 
-| 变量 | 作用 |
-| --- | --- |
-| `RESUME_AI_PROVIDER` | `deepseek`、`gemini`、`kimi`、`openai`、`anthropic`（别名 `claude`）；必须明确选择 |
-| `RESUME_AI_API_KEY` | 所选供应商的唯一密钥；更换供应商时同步更换 |
-| `RESUME_AI_MODEL` | 可选模型 ID 覆盖 |
-| `RESUME_AI_BASE_URL` | 可选 HTTPS API 地址覆盖，禁止重定向 |
-| `RESUME_CLI_LANG` | 可选：`zh` / `en`，覆盖界面语言，不改变报告语言 |
-| `RESUME_LOG_LEVEL` | debug / info / warn / error，默认 info |
+程序**不会自动读取 `.env`**。也可以通过 shell、容器或其他运行环境注入变量。命令行参数覆盖对应环境变量；已配置 provider/model 时无需重复传参。
 
-模型预设为 DeepSeek `deepseek-flash`、Gemini `gemini-3.8-flash`、Kimi 开放平台 `kimi-k3`、OpenAI `gpt-6-astra`、Claude `claude-sonnet-5`。Kimi Code 订阅使用 `k3` 和独立端点，不能混用开放平台 key：
+| 环境变量 | 说明 |
+| --- | --- |
+| `RESUME_AI_PROVIDER` | `deepseek` / `gemini` / `kimi` / `openai` / `anthropic`，`claude` 是 anthropic 别名 |
+| `RESUME_AI_API_KEY` | 所选供应商的 API key；更换供应商时同步更换，只通过环境变量传入 |
+| `RESUME_AI_MODEL` | 可选，覆盖该供应商的预设模型 |
+| `RESUME_AI_BASE_URL` | 可选，自定义 HTTPS API 地址；通常无需配置 |
+| `RESUME_CLI_LANG` | 可选，`zh` / `en`，覆盖帮助与常见输入错误的语言 |
+| `RESUME_LOG_LEVEL` | `debug` / `info` / `warn` / `error`，默认 `info` |
+
+以下为**代码中的模型预设与验证状态**，不是对厂商全部型号的兼容性承诺：
+
+| provider | 预设模型 | 接口 | 验证状态 |
+| --- | --- | --- | --- |
+| `deepseek` | `deepseek-flash` | Chat Completions | 有真实调用记录及离线协议测试 |
+| `gemini` | `gemini-3.8-flash` | Interactions | 有真实调用记录及离线协议测试 |
+| `kimi` | `kimi-k3` | Chat Completions | 真实调用使用 Kimi Code 的 `k3`；另有离线协议测试 |
+| `openai` | `gpt-6-astra` | Chat Completions + 严格 JSON Schema | 离线协议测试；未用真实 key 验证 |
+| `anthropic` / `claude` | `claude-sonnet-5` | 原生 Messages + 结构化输出 | 离线协议测试；未用真实 key 验证 |
+
+选择的型号必须支持适配器所用接口。Kimi Code 订阅与开放平台的 key、端点和模型名不同；使用 Code 订阅时：
 
 ```sh
-# 已注入对应供应商的 RESUME_AI_API_KEY
-bin/resume-cli score resume.pdf --jd jd.txt --provider kimi \
+# RESUME_AI_API_KEY 已设为对应的 Kimi Code key
+./bin/resume-cli score resume.pdf --jd jd.txt --provider kimi \
   --model k3 --base-url https://api.kimi.com/coding/v1
 ```
 
-OpenAI 与 Claude 使用相同的环境变量名，分别注入对应厂商 key：
+## 命令与参数
 
 ```sh
-bin/resume-cli score resume.pdf --jd jd.txt --provider openai --model gpt-6-astra
-bin/resume-cli score resume.pdf --jd jd.txt --provider anthropic --model claude-sonnet-5
-# --provider claude 与 anthropic 等价
+# parse 输出纯文本，可保存为文本文件
+./bin/resume-cli parse resume.pdf --output resume.txt
+
+# extract 输出结构化信息
+./bin/resume-cli extract resume.pdf --output extracted.json
+
+# score 读取纯文本 JD；默认生成中文评语和问题
+./bin/resume-cli score resume.pdf --jd jd.txt --output result.json
+
+# 英文报告，并保存耗时、token 用量和估算费用
+./bin/resume-cli score resume.pdf --jd jd.txt --lang en --stats usage.json
 ```
 
-Claude 使用原生 Messages API 与 output_config.format；OpenAI 使用 Chat Completions 的严格 JSON Schema。模型需支持相应结构化输出接口，支持厂商不代表兼容其所有历史型号。当前支持和单次费用见 [厂商与成本](docs/providers-and-cost.md)。
+`--jd` 要求 UTF-8 纯文本，不接受 PDF；如 JD 原件为 PDF，可以先用 `parse` 导出文本并检查阅读顺序。stdout 只写结果，日志和错误写入 stderr；失败退出码为 1。
 
-所有生成供应商统一使用 `RESUME_AI_API_KEY`，配合 `RESUME_AI_PROVIDER` 和可选的 `RESUME_AI_MODEL` 即可运行，无需模式参数。
-
-## CLI 命令
-
-```sh
-bin/resume-cli parse resume.pdf --output resume.txt
-bin/resume-cli extract resume.pdf --provider deepseek --output resume.json
-bin/resume-cli score resume.pdf --jd jd.txt --provider gemini \
-  --output result.json --stats usage.json
-bin/resume-cli score resume.pdf --jd jd.txt --provider deepseek --lang en
-```
-
-| 参数 | 行为 |
+| 参数 | 作用 |
 | --- | --- |
-| `--output <path>` | 保存结果；parse 为文本，其他为 JSON |
-| `--force` | 允许替换输出，禁止覆盖输入或输出别名 |
-| `--mock` | 合成样例离线演示 |
-| `--lang zh\|en` | 默认 zh；切换评论、面试问题语言，来源不翻译 |
-| `--provider` / `--model` / `--base-url` | 覆盖对应环境变量 |
-| `--cache-dir <dir>` | extract 使用的可选私有缓存，24 小时有效 |
-| `--stats <path>` | 保存成功及失败调用的耗时、token 和估算费用 |
-| `--max-pdf-mib <整数>` | PDF 文件上限，默认 100 MiB |
-| `--max-text-kib <整数>` | PDF 提取文本上限，默认 128 KiB |
-| `--max-jd-kib <整数>` | JD 文件上限，默认 64 KiB |
-| `--timeout <duration>` | 完整命令默认 90s，最多 10m |
+| `--jd <path>` | score 必填：岗位描述文本路径 |
+| `--output <path>` | 保存结果；省略时输出到终端 |
+| `--force` | 允许覆盖已有结果/统计文件，但不能覆盖输入或同一文件的别名 |
+| `--mock` | 使用合成样例离线演示，无 API 请求 |
+| `--lang zh\|en` | score 报告语言，默认中文；不改变界面语言 |
+| `--provider` / `--model` / `--base-url` | 覆盖模型环境配置 |
+| `--cache-dir <dir>` | 仅 extract：显式启用 24 小时私有缓存 |
+| `--stats <path>` | 保存成功/失败调用的耗时、token、缓存命中与估算费用 |
+| `--timeout <duration>` | 整个命令的时间预算，默认 `90s`，大于 0 且不超过 `10m` |
+| `--max-pdf-mib` / `--max-text-kib` / `--max-jd-kib` | 调整资源上限，范围见下表 |
 
-输出文件权限 0600，默认不可覆盖。stdout 只有结果，日志走 stderr；不记录 key、完整简历或模型原始响应。
+### 资源上限与参数校验
 
-上限参数必须为正整数；1 MiB = 1,048,576 字节，1 KiB = 1,024 字节。超限报错，不截断。以 UTF-8 常见汉字每字 3 字节粗算，128 KiB 约 4.37 万汉字、64 KiB 约 2.18 万汉字；这不是 token 计数。默认值通常能留出较充足的模型上下文空间，但具体容量仍取决于 tokenizer、提示词及输出预算。调大本地限制不等于扩大模型上下文。
+| 资源 | 默认值 | 参数允许范围（含端点） | 参数 |
+| --- | --- | --- | --- |
+| PDF 文件 | 32 MiB | 1–200 MiB | `--max-pdf-mib` |
+| PDF 提取文本 | 64 KiB | 1–256 KiB | `--max-text-kib` |
+| JD 文本 | 32 KiB | 1–128 KiB | `--max-jd-kib` |
 
 ```sh
-bin/resume-cli score resume.pdf --jd jd.txt \
+# 例如带作品集的较大 PDF，可以按需要增大读取上限
+./bin/resume-cli score resume.pdf --jd jd.txt \
   --max-pdf-mib 200 --max-text-kib 256 --max-jd-kib 128
 ```
 
-## 帮助与常见错误
+三个参数只接受范围内的整数。**0、负数、小数、非法文字、整数溢出以及超过最大值均会报错**，并指出对应参数。输入超过所设置的资源上限也会报错；不会截断、压缩或悄悄遗漏内容。
 
-`resume-cli --help` 列出命令用途、参数示例及环境变量；`resume-cli score --help` 提供评分命令示例。`completion` 是 CLI 框架附带的 Shell 补全脚本生成功能，本项目不提供该命令。
+1 MiB = 1,048,576 字节，1 KiB = 1,024 字节。文本大小按 UTF-8 字节计算：64 KiB 约容纳 2.18 万个常见汉字，32 KiB 约 1.09 万个。PDF 图片体积与提取文本体积分别限制，避免含图片的文件仅因体积较大就无法处理。
 
-先检查简历和 JD，再配置或调用 AI。常见输入错误根据运行环境显示中英文说明和处理建议，写入 stderr，退出码为 1，stdout 不混入错误信息：
+默认值与最大值是本项目的本地资源保护策略，不是模型官方上下文上限。字节数不等于 token 数；调大参数不会扩大模型上下文，仍需为提示词和输出留空间。模型上下文不足时可能拒绝请求；本工具尚未实现各型号的精确 token 预算预检。
 
-```text
-resume-cli: 岗位描述（JD）："jd.none"：文件不存在，请检查路径和文件名。
-resume-cli: 岗位描述（JD）："jd.empty"：文件为空或仅含空白，请填写岗位描述后重试。
-resume-cli: 简历 PDF："resume.pdf"：PDF 无法解析，可能已损坏或格式不受支持；请确认能正常打开，并重新导出 PDF。
-```
+### 界面语言与报告语言
 
-还会检查目录误用、读取权限、非 PDF、空 PDF、加密文件、扫描件无文本、UTF-8 编码、文件/文本大小及解析工具缺失。JD 必须是纯文本，PDF 需先转为文本。输出目录不存在、无写入权限或已有文件也会给出提示。常见文件错误不会直接显示 `stat`、内部临时路径或子进程退出信息。
-
-帮助与常见输入错误在运行时选择语言，不需要分别编译。优先级为 `RESUME_CLI_LANG` → `LC_ALL` → `LC_MESSAGES` → `LANG`（取首个非空值）；`zh_CN.UTF-8`、`zh_TW` 等中文 locale 显示中文，英文、C/POSIX、其他或未设置的 locale 显示英文。不会修改文件名、简历内容或 AI 输出；底层技术诊断和日志保持原有英文。
+帮助与常见输入错误按 `RESUME_CLI_LANG` → `LC_ALL` → `LC_MESSAGES` → `LANG` 的优先级取首个非空值。中文 locale（如 `zh_CN.UTF-8`、`zh_TW`）使用中文；其他、C/POSIX 或未设置时使用英文。无需分别编译。技术诊断与日志保持英文。
 
 ```sh
-RESUME_CLI_LANG=en bin/resume-cli --help
-RESUME_CLI_LANG=zh bin/resume-cli extract missing.pdf
-# 英文界面，报告仍默认中文
-RESUME_CLI_LANG=en bin/resume-cli score resume.pdf --jd jd.txt
-# 中文界面，生成英文报告
-RESUME_CLI_LANG=zh bin/resume-cli score resume.pdf --jd jd.txt --lang en
+RESUME_CLI_LANG=en ./bin/resume-cli --help
+RESUME_CLI_LANG=zh ./bin/resume-cli --help
+# 英文界面仍可生成中文报告；中文界面也可生成英文报告
+RESUME_CLI_LANG=zh ./bin/resume-cli score resume.pdf --jd jd.txt --lang en
 ```
 
-界面语言与报告语言完全独立；报告始终默认中文，仅由 `--lang en` 切换。
+报告始终独立默认中文，只由 `--lang en` 切换；JSON 字段名固定英文，extract 中的人名等事实保留来源语言。
 
 ## 示例输入与输出
 
-输入见 `testdata/resume-zh.pdf`、`testdata/jd.txt`；示例人物和联系方式均为合成。`extract` 输出姓名、电话、邮箱、城市、education 和 skills；缺失内容为 `""` / `[]`，不填造事实。
+仓库提供 [中文 PDF](testdata/resume-zh.pdf)、[英文 PDF](testdata/resume-en.pdf) 和 [示例 JD](testdata/jd.txt)。人物、联系方式和学校均为合成数据。
 
-[中文 extract 示例](examples/extract-zh.mock.json)、[中文 score 示例](examples/score-zh.mock.json)、[英文 score 示例](examples/score-en.mock.json)。mock 评分主字段如下：
+`extract testdata/resume-zh.pdf --mock`：
+
+```json
+{
+  "name": "林予安",
+  "phone": "",
+  "email": "lin.yuan@example.com",
+  "city": "杭州",
+  "education": [
+    {
+      "school": "示例大学",
+      "major": "软件工程",
+      "degree": "本科",
+      "graduation_time": "2022"
+    }
+  ],
+  "skills": [
+    "Go",
+    "PostgreSQL",
+    "Kubernetes"
+  ]
+}
+```
+
+缺失字符串使用 `""`，缺失集合使用 `[]`。技能从完整简历的实际工作、项目和技能描述中整理，不只读取“技能”栏目。
+
+`score testdata/resume-zh.pdf --jd testdata/jd.txt --mock`：
 
 ```json
 {
   "overall_score": 83,
   "skill_score": 100,
   "experience_score": 50,
-  "education_score": 100
+  "education_score": 100,
+  "comment": "合成演示：Go/PostgreSQL 开发及本科学历符合要求，Kubernetes 独立生产运维经验需要进一步确认。",
+  "interview_questions": [
+    "请介绍你在 Kubernetes 部署和生产运维中实际承担的职责。"
+  ],
+  "policy_version": "model-assessment-v1",
+  "language": "zh",
+  "mock": true
 }
 ```
 
-默认完整结果还包含 comment、interview_questions、policy_version、language 和 mock。上述分数是固定演示，不能视为实际模型评测结果。
+这是固定演示结果，不代表模型的实际准确率。真实报告保留相同结构，`mock` 为 false；四项分数均为 0–100 整数。完整样例见 [中文提取](examples/extract-zh.mock.json)、[中文评分](examples/score-zh.mock.json)、[英文评分](examples/score-en.mock.json)。
 
-## 技术选择与流程
+## 设计思路与技术选型
 
-Go + Cobra 负责 CLI、文件边界、HTTP、取消和 JSON 校验；Poppler 负责本地 PDF 文本提取。无 Agent 框架、数据库或服务端依赖。
+### 本地解析，两个独立 AI 任务
 
-- `parse`：只在本机读取 PDF，不调用 AI。
-- `extract`：把完整 PDF 提取文本传给模型，直接生成姓名、联系方式、城市、education、skills。只要求公开 JSON 结构，不生成 facts、行号引用或评分。技能根据实际工作/项目/技能描述整理，允许归纳名称，缺项不编造。
-- `score`：把完整简历文本和完整 JD 传给模型，直接返回四项 0–100 整数分数、评语和面试问题，不要求行号、逐字引文、事实目录或中间匹配数组。本地校验结构、分数范围和非空报告；不截断职责/要求。无效结果最多纠正一次；纠正调用失败仍保留初次校验原因。
+```mermaid
+flowchart LR
+    PDF[本地 PDF] --> P[Poppler 提取全文]
+    P --> Parse[parse：纯文本]
+    P --> Extract[extract：全文 + Resume Schema]
+    P --> Score[score：全文 + JD + 评分 Schema]
+    JD[UTF-8 JD] --> Score
+    Extract --> Model[所选供应商模型]
+    Score --> Model
+    Model --> Validate[JSON 修复与字段校验]
+    Validate --> Result[JSON 结果]
+```
 
-默认评分使用 `model-assessment-v1`：四项分数均是模型结合岗位重点作出的评价，没有固定加权公式，也没有代码保证语义或覆盖完整性；必须结合评语人工复核。不能与旧版逐项证据评分或不同模式的数值直接比较。
+- **保留完整上下文。** `score` 直接使用完整简历文本和完整 JD，不依赖 `extract`。公开提取字段没有完整工作经历，若用它代替原文评分，会丢失职责和项目信息。两个任务共用模型接口、JSON 校验、HTTP 与统计逻辑。
+- **单模型完成一次任务。** 正常情况下 extract 或 score 各进行一次生成；不串联多个模型或要求生成额外的证据目录。这样减少中间结构失败、延迟与调用成本。并不保证每次只产生一个 HTTP 请求，失败恢复策略见下文。
+- **评分与代码校验分工。** 模型根据岗位重点给出分数、理由和问题，代码不套固定加权公式。`policy_version=model-assessment-v1` 标识当前输出策略。代码检查结构和范围，不用技能名称是否逐字出现来代替语义判断。
+- **提示词限制推断。** 区分任职要求与优先条件、合并重复条件、区分“未体现”与“不具备”，不凭总工龄推断某项技术的使用年限。简历/JD 作为待分析数据，不应覆盖任务指令；这类提示约束仍需内容复核。
 
+| 技术 | 选择理由与取舍 |
+| --- | --- |
+| Go | 标准库提供文件、JSON、HTTP、超时取消和测试支持；编译为单个 CLI 二进制 |
+| Cobra | 复用命令与参数解析；定制帮助和常见错误，保持终端使用清楚 |
+| Poppler | 在本地处理 PDF 字体与文本提取，避免自行实现 PDF 解析；代价是需要外部依赖，且不含 OCR |
+| 原生 HTTP 适配器 | 用小接口隔离厂商差异；无大型 Agent 框架或数据库依赖，便于离线测试 |
+| JSON Schema + 本地校验 | 尽早约束输出格式并检查字段；不能替代语义正确性验证 |
 
-单模型、一次请求并不保证每次结果相同；模型判断和自由文本仍需质量验证。详细设计见 [架构文档](docs/architecture.md)。
+### 错误恢复与文件安全
 
-## 测试、评测与 Docker
+- 模型 JSON 只自动修复 BOM、完整代码围栏和字符串外的尾逗号。拒绝缺项、null、重复键、未知字段和错误字段类型；评分另校验分数范围、非空评语和面试问题。
+- 无效输出最多让模型根据原始输入和校验原因纠正一次。不会把损坏的响应直接当指令；若纠正请求失败，保留初次校验原因。
+- HTTP 对指定的限流/临时服务错误有限重试，最多 3 次尝试；不重试 401 或不明网络故障。命令有统一超时，取消传播到本地解析和网络请求。每次已观察的调用都计入统计。
+- 本地输入先验证再调用 AI；错误解释文件不存在、无权限、空文件、非 PDF、损坏/加密、无可提取文字、编码错误和超限。常见文件错误不直接暴露 OS 操作或临时文件路径。
+- 输出采用完整文件提交，默认不覆盖已有文件，禁止覆盖输入及其别名；创建的结果/缓存文件使用 0600 权限。日志不输出 key、完整简历或模型原始响应。
+- extract 缓存默认关闭；启用后按输入文本哈希及 provider/model/endpoint 区分，24 小时有效。score 不使用提取缓存。
 
-离线 Go 单测/race/vet 持续验证，最新结果见开发记录。Go 单元测试使用内存 HTTP 替身，AI/CLI 测试默认禁止真实网络；测试不读取 `.env`。离线验证覆盖完整文本输入、JSON 修复、评分、重试、取消、缓存及输出防覆盖。
+例如：
+
+```text
+resume-cli: 岗位描述（JD）："jd.none"：文件不存在，请检查路径和文件名。
+resume-cli: --max-pdf-mib: 该参数必须是 1 到 200 之间的整数。
+```
+
+PDF 解析在本地进行；真实 extract/score 会把**提取出的简历文本与任务所需 JD**发送给所选供应商。原始 PDF 图片不会发送给模型进行视觉分析。API key、真实简历和评测中间结果应保存在 Git 忽略的本地目录中。
+
+### 代码结构
+
+```text
+cmd/resume-cli/    程序入口、信号与退出码
+internal/cli/     命令、配置、帮助、参数校验和依赖组装
+internal/app/     Parse / Extract / Score 用例与小接口
+internal/pdf/     有界 PDF 读取、Poppler 子进程与文本输出
+internal/ai/      提示词、厂商适配器、HTTP、纠正重试与用量
+internal/domain/  Document / Resume 与字段校验
+internal/report/  评分与报告结构
+internal/fileio/  有界输入、安全输出与文件错误
+internal/jsonutil/ JSON 校验与有限格式修复
+internal/cache/   可选的私有提取缓存
+internal/i18n/    locale 检测、消息目录和错误展示
+scripts/          合成数据生成与独立评测工具
+```
+
+详细实现见 [架构文档](docs/architecture.md) 和 [全文提取设计](docs/extraction-design.md)。
+
+## 验证、成本与 Docker
 
 ```sh
+# make build 下载过所需依赖后，以下 Go 检查使用本地模块缓存
 make check
 python3 -m unittest discover -s scripts -p 'test_*.py'
-# 默认只列计划，不读取 key 或联网
-python3 scripts/evaluate.py
-# 离线演示评测
-python3 scripts/evaluate.py --routes mock --repeats 1 --execute --out .local/eval-new
-# 明确准备各供应商私有配置后才执行真实 API
-python3 scripts/evaluate.py --routes gemini deepseek --env-dir .local/provider-env \
-  --limit 2 --repeats 1 --execute --out .local/eval-live-new
 
+# 仅打印评测计划，不读取 key，不调用模型
+python3 scripts/evaluate.py
+# 离线合成样例评测；输出目录必须不存在
+python3 scripts/evaluate.py --routes mock --repeats 1 --execute --out .local/eval-demo
+```
+
+Go 测试使用内存 HTTP 替身，AI/CLI 测试默认禁止真实网络，不读取 `.env`。覆盖文件与大小边界、参数范围/溢出、PDF 进程失败、完整输入、JSON 修复、一次纠正、厂商协议、超时取消、缓存、输出防覆盖及中英文界面/报告的独立性。`make check` 包含单测、race 和 vet。
+
+DeepSeek、Gemini、Kimi Code 有有限真实调用记录，OpenAI/Claude 仅做过离线协议验证。旧评测使用过不同 prompt 和评分结构，不能把它们混算成当前版本的准确率或速度保证。
+
+`--stats` 的费用按供应商返回的 token 和代码中的费率估算；未知费用不当作零，Kimi Code 订阅不折算成按 token 美元账单。详见 [厂商与成本](docs/providers-and-cost.md)。真实评测需显式执行并配置对应 key，方法见 [评测协议](docs/evaluation.md)。
+
+Dockerfile 使用多阶段构建和非 root 运行用户，包含 Poppler 及演示样例：
+
+```sh
 docker build -t resume-cli .
 docker run --rm --network none resume-cli score /examples/resume-zh.pdf \
   --jd /examples/jd.txt --mock
 ```
 
-真实模型测试与单测分开，费用只是按已观察 token 的估算；未知费用不写成零。Kimi Code 为订阅配额，不能冒充按 token 美元账单。多供应商配置方法及检查规则见 [评测协议](docs/evaluation.md)。
+构建需要访问基础镜像和包源；mock 容器运行可禁网。本轮验证为本机离线测试与二进制演示，未重新验证最新镜像构建。
 
-## 已实现功能与限制
+## 已知限制与后续工作
 
-已实现三个命令、中英文、文件输出、mock、有限 JSON 修复、日志、Makefile 与 Dockerfile。JSON 修复仅处理完整代码围栏、BOM、字符串外尾逗号；不修造业务事实。拒绝重复键、null、未知字段以及过量输入。
+- 只提取 PDF 中已有的文本；不支持 OCR、作品图片的视觉理解或加密 PDF 解锁。复杂多栏、跨页页眉可能影响阅读顺序，建议先 `parse` 检查。
+- 没有按模型精确计算上下文 token，也没有确定性的任职时间合并或技术使用年限推导。
+- 提取可能遗漏或过度归纳；评分与评语有随机性，需人工检查。有限样本和结构校验不能证明招聘判断准确。
+- 未验证 Windows、高并发批处理及 OpenAI/Claude 的真实调用。
+- 实现包含全部三个命令、文件输出、mock、JSON 修复、日志、中英文、资源配置、测试与构建脚本；公开仓库发布、演示视频及外部提交尚未完成。
 
-- PDF 上限 100 MiB、文本 128 KiB、JD 64 KiB（UTF-8 字节数，不是字符数或要求条数）；扫描件需要 OCR，当前不支持；不解锁加密 PDF。
-- 不自动纠正多栏阅读顺序或跨页页眉；完整文本传给模型，不按技能或 JD 条数截断。资源上限用于控制内存和请求开销，超限明确报错。
-- extract 校验 JSON 结构和空值约定，不用原文子串检查代替语义判断；因此不能保证模型提取没有遗漏或归纳错误。默认评分只做结构与范围校验，不能证明职责覆盖和评论语义准确。
-- 没有确定性任期合并、精确技能年限推导或批量招聘服务。不得把总工龄当技能年限。
-- 合成回归集不是独立人工标注准确率；真实复杂文档仅有限测试，不声称生产稳定性。OpenAI/Claude 尚未真实调用，Windows 或高并发未验证。
-- 尚未发布公开仓库或演示视频。原题、真实简历、密钥及中间结果均排除 Git。
-
-历史报告：[早期组合评测](docs/evaluation-results-2026-09-20.md)、[单模型与组合比较](docs/evaluation-single-vs-hybrid-2026-09-20.md)、[跨行修复前的真实简历测试](docs/evaluation-real-resume-2026-09-20.md)。这些记录保留失败，不能与新版本测量混算。第三方信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+历史实验保留在 `docs/evaluation-*.md` 与 `examples/history/`，仅用于查阅设计演进，不作为当前用法。第三方信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

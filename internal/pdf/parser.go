@@ -17,8 +17,10 @@ import (
 )
 
 // Image-heavy resumes can be large; extracted text has a separate AI-input limit.
-const MaxPDFBytes = 100 << 20
-const MaxTextBytes = 128 << 10
+const DefaultPDFBytes = 32 << 20
+const DefaultTextBytes = 64 << 10
+const MaxPDFBytes = 200 << 20
+const MaxTextBytes = 256 << 10
 
 type Parser struct {
 	Binary string
@@ -63,13 +65,16 @@ func (p Parser) Parse(ctx context.Context, path string) (doc domain.Document, re
 	}
 	pdfLimit, textLimit := p.MaxPDFBytes, p.MaxTextBytes
 	if pdfLimit == 0 {
-		pdfLimit = MaxPDFBytes
+		pdfLimit = DefaultPDFBytes
 	}
 	if textLimit == 0 {
-		textLimit = MaxTextBytes
+		textLimit = DefaultTextBytes
 	}
 	if pdfLimit < 0 || textLimit < 0 || pdfLimit > int64(^uint(0)>>1)-1 {
 		return doc, i18n.New("资源上限必须是正数，且不能超过本机可表示的字节范围。")
+	}
+	if pdfLimit > MaxPDFBytes || textLimit > MaxTextBytes {
+		return doc, i18n.New("PDF 文件上限不能超过 200 MiB，提取文本上限不能超过 256 KiB。")
 	}
 	data, err := fileio.Read(path, pdfLimit)
 	if err != nil {

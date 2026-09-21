@@ -86,9 +86,9 @@ func New(out, errOut io.Writer, getenv func(string) string) *cobra.Command {
 	f.StringVar(&o.cacheDir, "cache-dir", "", tr("仅 extract：缓存目录，如 .cache；24 小时内复用提取结果"))
 	f.StringVar(&o.stats, "stats", "", tr("统计文件路径，如 usage.json；记录耗时、token 和估算费用"))
 	f.DurationVar(&o.timeout, "timeout", 90*time.Second, tr("最多等待多久，如 90s 或 2m（上限 10m）"))
-	f.Int64Var(&o.maxPDFMiB, "max-pdf-mib", pdf.MaxPDFBytes>>20, tr("PDF 文件大小上限，单位 MiB，必须为正整数"))
-	f.Int64Var(&o.maxTextKiB, "max-text-kib", pdf.MaxTextBytes>>10, tr("PDF 提取文本上限，单位 KiB；超限报错，不截断"))
-	f.Int64Var(&o.maxJDKiB, "max-jd-kib", 64, tr("JD 文本上限，单位 KiB（UTF-8 字节），必须为正整数"))
+	f.Int64Var(&o.maxPDFMiB, "max-pdf-mib", pdf.DefaultPDFBytes>>20, tr("PDF 文件大小上限，单位 MiB，必须为正整数"))
+	f.Int64Var(&o.maxTextKiB, "max-text-kib", pdf.DefaultTextBytes>>10, tr("PDF 提取文本上限，单位 KiB；超限报错，不截断"))
+	f.Int64Var(&o.maxJDKiB, "max-jd-kib", 32, tr("JD 文本上限，单位 KiB（UTF-8 字节），必须为正整数"))
 	for _, name := range []string{"parse", "extract", "score"} {
 		name := name
 		cmd := &cobra.Command{Use: name + tr(" <简历.pdf>"), Args: func(cmd *cobra.Command, args []string) error {
@@ -116,15 +116,15 @@ func New(out, errOut io.Writer, getenv func(string) string) *cobra.Command {
 		}
 		cmd.RunE = func(cmd *cobra.Command, args []string) (runErr error) {
 			start := time.Now()
-			pdfLimit, err := limitBytes(o.maxPDFMiB, 1<<20)
+			pdfLimit, err := limitBytes(o.maxPDFMiB, 1<<20, pdf.MaxPDFBytes>>20)
 			if err != nil {
 				return i18n.Errorf("%s: %w", "--max-pdf-mib", err)
 			}
-			textLimit, err := limitBytes(o.maxTextKiB, 1<<10)
+			textLimit, err := limitBytes(o.maxTextKiB, 1<<10, pdf.MaxTextBytes>>10)
 			if err != nil {
 				return i18n.Errorf("%s: %w", "--max-text-kib", err)
 			}
-			jdLimit, err := limitBytes(o.maxJDKiB, 1<<10)
+			jdLimit, err := limitBytes(o.maxJDKiB, 1<<10, 128)
 			if err != nil {
 				return i18n.Errorf("%s: %w", "--max-jd-kib", err)
 			}
@@ -332,7 +332,10 @@ func (p parsedInput) Parse(ctx context.Context, _ string) (domain.Document, erro
 }
 
 // Leave one byte for the bounded reader's overflow probe. Check before multiplying.
-func limitBytes(value, unit int64) (int64, error) {
+func limitBytes(value, unit, ceiling int64) (int64, error) {
+	if value < 1 || value > ceiling {
+		return 0, i18n.Errorf("该参数必须是 1 到 %d 之间的整数。", ceiling)
+	}
 	max := int64(^uint(0)>>1) - 1
 	if value <= 0 || value > max/unit {
 		return 0, i18n.New("资源上限必须是正数，且不能超过本机可表示的字节范围。")

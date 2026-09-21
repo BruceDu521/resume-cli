@@ -68,4 +68,6 @@ var english = map[string]string{
 	"PDF 文件大小上限，单位 MiB，必须为正整数":                        "Maximum PDF file size in MiB; must be a positive integer",
 	"PDF 提取文本上限，单位 KiB；超限报错，不截断":                      "Maximum extracted PDF text in KiB; reject oversized input without truncation",
 	"JD 文本上限，单位 KiB（UTF-8 字节），必须为正整数":                 "Maximum JD text in KiB (UTF-8 bytes); must be a positive integer",
+	"PDF 文件上限不能超过 200 MiB，提取文本上限不能超过 256 KiB。":        "PDF file limits cannot exceed 200 MiB; extracted text limits cannot exceed 256 KiB.",
+	"该参数必须是 1 到 %d 之间的整数。":                            "This option must be an integer between 1 and %d.",
 }

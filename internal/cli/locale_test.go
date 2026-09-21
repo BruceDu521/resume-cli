@@ -59,7 +59,7 @@ func TestEnglishHelpAndErrorRendering(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, want := range []string{"Usage:", "Examples:", "RESUME_CLI_LANG", "LC_ALL", "RESUME_AI_PROVIDER", "Chinese by default", "100 MiB", "64 KiB"} {
+		for _, want := range []string{"Usage:", "Examples:", "RESUME_CLI_LANG", "LC_ALL", "RESUME_AI_PROVIDER", "Chinese by default", "32 MiB", "64 KiB", "200 MiB"} {
 			if !strings.Contains(out, want) {
 				t.Fatal("missing translation", want)
 			}

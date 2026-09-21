@@ -10,6 +10,8 @@ import (
 	"resume-cli/internal/jsonutil"
 )
 
+const maxValidationRetries = 3
+
 type Structurer struct {
 	Generator Generator
 	Observe   func(Usage)
@@ -34,8 +36,15 @@ func (s Structurer) decode(ctx context.Context, q Request, out any) error {
 
 func (s Structurer) decodeChecked(ctx context.Context, q Request, out any, validate func() error) error {
 	originalStage := q.Stage
+	originalInstruction := q.Instruction
 	var validationReason string
-	for attempt := 0; attempt < 2; attempt++ {
+	for attempt := 0; attempt <= maxValidationRetries; attempt++ {
+		if err := ctx.Err(); err != nil {
+			if validationReason != "" {
+				return fmt.Errorf("%s: initial output failed validation (%s); corrective request canceled: %w", originalStage, validationReason, err)
+			}
+			return fmt.Errorf("%s: %w", originalStage, err)
+		}
 		b, u, err := s.Generator.Generate(ctx, q)
 		if err != nil {
 			if s.Observe != nil {
@@ -60,15 +69,17 @@ func (s Structurer) decodeChecked(ctx context.Context, q Request, out any, valid
 		if err == nil {
 			return nil
 		}
-		if attempt == 1 {
-			return fmt.Errorf("%s: model output failed validation after one corrective retry (%s)", originalStage, reason)
+		if attempt == maxValidationRetries {
+			return fmt.Errorf("%s: model output failed validation after %d corrective retries (%s)", originalStage, maxValidationRetries, reason)
 		}
-		// A single bounded regeneration from the original source. Do not send the
+		// Bounded regeneration from the original source. Do not send the
 		// malformed response or raw decoder errors back as instructions. The reason
 		// is either a fixed JSON message or an internally generated domain error.
-		validationReason = reason
+		if validationReason == "" {
+			validationReason = reason
+		}
 		q.Stage = originalStage + "_validation_retry"
-		q.Instruction += "\nValidation issue: " + reason + ".\nThe previous response failed JSON structure or field validation. Return one complete DATA INSTANCE matching the supplied schema, without schema metadata, extra fields, nulls or prose. Use the original input only, with no invented facts."
+		q.Instruction = originalInstruction + "\nValidation issue: " + reason + ".\nThe previous response failed JSON structure or field validation. Return one complete DATA INSTANCE matching the supplied schema, without schema metadata, extra fields, nulls or prose. Use the original input only, with no invented facts."
 	}
 	return errors.New("unreachable generation state")
 }

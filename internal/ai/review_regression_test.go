@@ -41,7 +41,7 @@ func TestScoreRejectsInvalidAndEmptyOutput(t *testing.T) {
 	v := validEvaluation()
 	for _, raw := range []string{`{"comment":"x","interview_questions":["Q?"]","matches":[]}`, `{"comment":"x","interview_questions":["Q?"],"matches":[]}`, `{}`, strings.Replace(mustJSON(t, v), `"overall_score":75`, `"overall_score":null`, 1), strings.Replace(mustJSON(t, v), `"overall_score":75`, `"overall_score":75.5`, 1)} {
 		g := &sequenceGenerator{bodies: []string{raw}}
-		if _, err := (Structurer{Generator: g}).Evaluate(context.Background(), domain.NewDocument("Go"), "Go", "zh"); err == nil || g.calls != 2 {
+		if _, err := (Structurer{Generator: g}).Evaluate(context.Background(), domain.NewDocument("Go"), "Go", "zh"); err == nil || g.calls != 4 {
 			t.Fatal("invalid output accepted", err)
 		}
 	}

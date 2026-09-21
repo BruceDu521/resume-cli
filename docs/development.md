@@ -4,7 +4,7 @@
 
 用户明确要求从本仓库删除 Jev，另一个 session 在独立目录维护该实验。本目录只保留单模型；移除模式参数、专用 key 读取、Candidate/Job/Matcher、证据聚合及旧报告模板。不要修改另一个目录，也不要改动用户的 .env、.env.bak 或私有凭据文件。
 
-extract 使用完整文本 + ResumeSchema。score 使用完整文本 + JD，直接生成四项分数、comment、interview_questions，policy=model-assessment-v1。保持现有提示词和一次纠正重试；纠正请求失败也保留初次校验原因。结构校验不能代表语义或要求覆盖正确。
+extract 使用完整文本 + ResumeSchema。score 使用完整文本 + JD，直接生成四项分数、comment、interview_questions，policy=model-assessment-v1。保持现有提示词和最多三次纠正重试；纠正请求失败也保留初次校验原因。结构校验不能代表语义或要求覆盖正确。
 
 ## 测试与配置
 

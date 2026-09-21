@@ -21,7 +21,7 @@
 | internal/app | Parse/Extract/Score 用例；Parser、Extractor、Structurer、Matcher、Evaluator 小接口 |
 | internal/domain | 来源范围、字段校验、确定性评分 |
 | internal/pdf | 本地 Poppler、文件/文本大小限制及取消 |
-| internal/ai | 共用提示词/schema、单模型分析、四个生成适配器、可选Jev、mock、HTTP/用量 |
+| internal/ai | 共用提示词/schema、单模型分析、五个厂商适配器、可选Jev、mock、HTTP/用量 |
 | internal/report | 公开结果结构及 mock 中英文模板 |
 | internal/cache | extract与Jev结构化阶段显式启用的私有缓存 |
 | internal/fileio / jsonutil | 有界输入、原子输出及有限 JSON 修复 |
@@ -42,7 +42,7 @@ extract使用独立中文任务提示：阅读全文，按公开Schema提取；�
 
 Candidate.Validate 不再用姓名、技能或学历的逐字匹配判定内容正确；结构化字段允许合理规范化，原文引用仍须能定位。single 仅生成最终分数、评语和问题，避免无关提取或定位错误阻断评分。single 使用简短中文任务提示，要求同时考虑职责与任职要求、合并重复条件、不将优先项当必需项、区分未体现与不具备，禁止凭总工龄推断技能年限。未设置模型输出的逐字引用任务。提示词不是语义正确性的保证；当前没有程序化的 JD 覆盖完整性检查。Jev 的共享 evidenceRules 仍解释跨行原文范围。
 
-模型 ID/provider/base URL 可通过环境或参数选择，默认只有 `RESUME_AI_API_KEY`。显式Jev模式另用TYPESAFE_API_KEY及可选RESUME_JEV_MODEL/TYPESAFE_BASE_URL。Gemini 使用 Interactions，其余使用各自 Chat Completions 格式；Kimi Code 与开放平台端点/型号不互通。密钥不进入参数、日志、缓存或报告。
+模型 ID/provider/base URL 可通过环境或参数选择，默认只有 `RESUME_AI_API_KEY`。显式Jev模式另用TYPESAFE_API_KEY及可选RESUME_JEV_MODEL/TYPESAFE_BASE_URL。Gemini 使用 Interactions，Claude 使用原生 Messages/结构化输出，其余使用各自 Chat Completions 格式；Kimi Code 与开放平台端点/型号不互通。密钥不进入参数、日志、缓存或报告。
 
 校验失败只从原始输入重新生成一次；不发送前次未信任响应作为指令。不放宽来源要求。最终错误区分无效 JSON 与领域来源/状态错误，后者使用固定错误文本，不回显简历片段或供应商响应。每次调用（包括纠正和失败）保留 stats。
 
@@ -65,3 +65,5 @@ PDF20MiB、文本160KiB、JD64KiB、序列化模型输入200KiB、AI响应2MiB�
 输出默认不可覆盖、不能与输入/其他输出为同一路径或文件别名；私有文件0600。JSON 拒绝重复键、null、缺失或未知字段；只修围栏/BOM/尾逗号。
 
 单元测试使用内存替身，AI/CLI 默认 transport 禁网，不读取任务凭据。真实 API、真实简历及性能评测单独执行，材料保留本地。扫描PDF、多栏阅读顺序、任意长文语义及高并发不是当前已解决问题。
+
+Claude 的 HTTP Schema 移除官方不支持的数值上下界，原始约束仍保留在提示及本地验证，不修改其他供应商的共享 Schema。读取文本块而非思考块，拒绝截断/拒答/工具调用终态，统计输入与输出用量；存在缓存读写时不冒充精确账单。OpenAI 启用严格 JSON Schema，并仅对推理型号发送 reasoning_effort。两者目前仅通过离线 HTTP 替身测试。

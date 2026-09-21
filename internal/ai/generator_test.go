@@ -33,7 +33,7 @@ func TestProviderContracts(t *testing.T) {
 				if provider == "deepseek" && body["thinking"].(map[string]any)["type"] != "disabled" {
 					t.Fatal(body)
 				}
-				if provider == "openai" && body["reasoning_effort"] != "low" {
+				if provider == "openai" && (body["store"] != false || body["response_format"].(map[string]any)["type"] != "json_schema") {
 					t.Fatal(body)
 				}
 				return response(200, `{"model":"model","choices":[{"finish_reason":"stop","message":{"content":"{}"}}],"usage":{"prompt_tokens":100,"completion_tokens":20,"prompt_tokens_details":{"cached_tokens":5}}}`), nil

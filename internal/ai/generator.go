@@ -42,6 +42,9 @@ func (r *Remote) Generate(ctx context.Context, q Request) ([]byte, Usage, error)
 	if len(state) > 200<<10 {
 		return nil, u, errors.New("model input exceeds local serialized input budget (200 KiB); input was not truncated")
 	}
+	if r.Provider == "anthropic" || r.Provider == "claude" {
+		return r.generateAnthropic(ctx, q, state, start)
+	}
 	if r.Provider == "gemini" {
 		body := map[string]any{"model": r.Model, "system_instruction": q.Instruction, "input": string(state), "store": false, "response_format": map[string]any{"type": "text", "mime_type": "application/json", "schema": q.Schema}, "generation_config": map[string]any{"thinking_level": "low", "max_output_tokens": 12000}}
 		var result struct {
@@ -105,7 +108,11 @@ func (r *Remote) Generate(ctx context.Context, q Request) ([]byte, Usage, error)
 		body["max_tokens"] = 12000
 	case "openai":
 		body["max_completion_tokens"] = 16000
-		body["reasoning_effort"] = "low"
+		body["store"] = false
+		if strings.HasPrefix(r.Model, "gpt-5") || strings.HasPrefix(r.Model, "gpt-6") || strings.HasPrefix(r.Model, "o") {
+			body["reasoning_effort"] = "low"
+		}
+		body["response_format"] = map[string]any{"type": "json_schema", "json_schema": map[string]any{"name": "resume_analysis", "strict": true, "schema": q.Schema}}
 	case "kimi":
 		if r.Model == "kimi-k3" || r.Model == "k3" || r.Model == "k3-256k" {
 			body["max_completion_tokens"] = 16000

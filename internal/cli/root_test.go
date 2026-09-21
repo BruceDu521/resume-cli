@@ -112,14 +112,18 @@ func TestHelpAndPrivateInputs(t *testing.T) {
 	}
 }
 func TestRemoteConfig(t *testing.T) {
-	for _, p := range []string{"gemini", "deepseek", "openai", "kimi"} {
+	for _, p := range []string{"gemini", "deepseek", "openai", "kimi", "anthropic", "claude"} {
 		r, e := remote(options{provider: p}, func(k string) string {
 			if k == "RESUME_AI_API_KEY" {
 				return "synthetic"
 			}
 			return ""
 		})
-		if e != nil || r.Key != "synthetic" || r.Provider != p {
+		wantProvider := p
+		if p == "claude" {
+			wantProvider = "anthropic"
+		}
+		if e != nil || r.Key != "synthetic" || r.Provider != wantProvider {
 			t.Fatal(r, e)
 		}
 	}
@@ -153,7 +157,7 @@ func TestFailureStats(t *testing.T) {
 }
 
 func TestSingleModelNeedsOnlySelectedKey(t *testing.T) {
-	for _, provider := range []string{"deepseek", "gemini", "kimi", "openai"} {
+	for _, provider := range []string{"deepseek", "gemini", "kimi", "openai", "anthropic", "claude"} {
 		var out, logs bytes.Buffer
 		cmd := New(&out, &logs, func(k string) string {
 			if strings.HasPrefix(k, "TYPESAFE_") {
@@ -192,7 +196,7 @@ func TestFlagOverridesEnvironment(t *testing.T) {
 }
 
 func TestLegacyKeysDoNotSelectCredential(t *testing.T) {
-	for _, provider := range []string{"deepseek", "gemini", "kimi", "openai"} {
+	for _, provider := range []string{"deepseek", "gemini", "kimi", "openai", "anthropic", "claude"} {
 		_, err := remote(options{provider: provider}, func(k string) string {
 			if k == strings.ToUpper(provider)+"_API_KEY" {
 				return "legacy-secret"
@@ -226,5 +230,19 @@ func TestDefaultAndOptionalJev(t *testing.T) {
 	cmd.SetArgs([]string{"score", "missing.pdf", "--jd", "../../testdata/jd.txt", "--provider", "deepseek", "--pipeline", "jev"})
 	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "TYPESAFE_API_KEY") {
 		t.Fatal(err)
+	}
+}
+
+func TestClaudeDefaultAndAlias(t *testing.T) {
+	for _, provider := range []string{"anthropic", "claude"} {
+		r, err := remote(options{provider: provider}, func(k string) string {
+			if k == "RESUME_AI_API_KEY" {
+				return "synthetic"
+			}
+			return ""
+		})
+		if err != nil || r.Provider != "anthropic" || r.Model != "claude-sonnet-5" || r.BaseURL != "https://api.anthropic.com/v1" {
+			t.Fatal(r, err)
+		}
 	}
 }

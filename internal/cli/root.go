@@ -70,7 +70,7 @@ func New(out, errOut io.Writer, getenv func(string) string) *cobra.Command {
 	f.BoolVar(&o.force, "force", false, "覆盖已有输出文件（不允许覆盖输入）")
 	f.BoolVar(&o.mock, "mock", false, "使用离线合成演示模式")
 	f.StringVar(&o.lang, "lang", "zh", "报告语言：zh / en")
-	f.StringVar(&o.provider, "provider", getenv("RESUME_AI_PROVIDER"), "生成模型：gemini / deepseek / openai / kimi")
+	f.StringVar(&o.provider, "provider", getenv("RESUME_AI_PROVIDER"), "生成模型：gemini / deepseek / openai / kimi / anthropic（claude 别名）")
 	f.StringVar(&o.model, "model", getenv("RESUME_AI_MODEL"), "覆盖生成模型 ID")
 	f.StringVar(&o.baseURL, "base-url", getenv("RESUME_AI_BASE_URL"), "生成模型 HTTPS API 地址")
 	f.StringVar(&o.pipeline, "pipeline", envDefault(getenv, "RESUME_AI_PIPELINE", "single"), "评分模式：single（默认）/ jev；hybrid 为 jev 别名")
@@ -247,10 +247,13 @@ func remote(o options, getenv func(string) string) (*ai.Remote, error) {
 		model, base = "deepseek-flash", "https://api.deepseek.com"
 	case "openai":
 		model, base = "gpt-6-astra", "https://api.openai.com/v1"
+	case "anthropic", "claude":
+		o.provider = "anthropic"
+		model, base = "claude-sonnet-5", "https://api.anthropic.com/v1"
 	case "kimi":
 		model, base = "kimi-k3", "https://api.moonshot.ai/v1"
 	default:
-		return nil, errors.New("choose --provider gemini, deepseek, kimi or openai (or set RESUME_AI_PROVIDER)")
+		return nil, errors.New("choose --provider gemini, deepseek, kimi, openai or anthropic (claude alias) (or set RESUME_AI_PROVIDER)")
 	}
 	if o.model != "" {
 		model = o.model

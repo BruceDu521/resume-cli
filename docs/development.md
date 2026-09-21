@@ -34,3 +34,7 @@ RESUME_AI_API_KEY为所选生成供应商key，主.env当前DS且RESUME_AI_PIPEL
 ## 本轮快速简化
 
 依据真实JD暴露的失败，移除默认评分的引用和中间结构合同，直接使用原题六字段结果；无新增真实API调用。旧真实结果均对应旧合同，不能当作新版本实测。全包离线回归覆盖字段缺失/null/非整数/越界/空评语/空问题、完整输入不截断、纠正失败保留原始原因及Jev兼容。尚未验证新的模型输出质量及一次成功率。
+
+## 厂商支持补齐
+
+新增anthropic（claude别名），默认claude-sonnet-5，原生Messages结构化输出；OpenAI启用严格JSON Schema。仍统一RESUME_AI_API_KEY。详情及2026-09-21官方费率核算见providers-and-cost.md。无新增真实API请求。

@@ -2,7 +2,7 @@
 
 用 Go 编写的 PDF 简历解析与岗位匹配 CLI。PDF 在本地由 Poppler 提取文本；`extract` 和 `score` 各调用一个所选模型，输出经过校验的 JSON。默认中文，支持英文报告。
 
-当前默认单模型；保留 `--pipeline jev` 显式选择模型 + Jev 评分。普通 `extract` 始终只做全文信息提取。支持 DeepSeek、Gemini、Kimi 和 OpenAI 适配器；OpenAI 尚未实测。历史对照结果保留，不代表当前版本的性能。当前提取设计与验证见 [全文提取说明](docs/extraction-design.md)。
+当前默认单模型；保留 `--pipeline jev` 显式选择模型 + Jev 评分。普通 `extract` 始终只做全文信息提取。支持 DeepSeek、Gemini、Kimi、OpenAI 和 Anthropic（Claude）；OpenAI/Claude 通过离线协议测试，尚无真实 key 实测。历史对照结果保留，不代表当前版本的性能。当前提取设计与验证见 [全文提取说明](docs/extraction-design.md)。
 
 ## 安装与演示
 
@@ -39,7 +39,7 @@ set +a
 
 | 变量 | 作用 |
 | --- | --- |
-| `RESUME_AI_PROVIDER` | `deepseek`、`gemini`、`kimi` 或 `openai`；必须明确选择 |
+| `RESUME_AI_PROVIDER` | `deepseek`、`gemini`、`kimi`、`openai`、`anthropic`（别名 `claude`）；必须明确选择 |
 | `RESUME_AI_API_KEY` | 所选供应商的唯一密钥；更换供应商时同步更换 |
 | `RESUME_AI_MODEL` | 可选模型 ID 覆盖 |
 | `RESUME_AI_BASE_URL` | 可选 HTTPS API 地址覆盖，禁止重定向 |
@@ -47,13 +47,23 @@ set +a
 | `TYPESAFE_API_KEY` / `RESUME_JEV_MODEL` / `TYPESAFE_BASE_URL` | 可选 Jev 配置，仅 Jev 评分读取；模型默认 `jev-1.13.0` |
 | `RESUME_LOG_LEVEL` | debug / info / warn / error，默认 info |
 
-模型预设为 DeepSeek `deepseek-flash`、Gemini `gemini-3.8-flash`、Kimi 开放平台 `kimi-k3`、OpenAI `gpt-6-astra`。Kimi Code 订阅使用 `k3` 和独立端点，不能混用开放平台 key：
+模型预设为 DeepSeek `deepseek-flash`、Gemini `gemini-3.8-flash`、Kimi 开放平台 `kimi-k3`、OpenAI `gpt-6-astra`、Claude `claude-sonnet-5`。Kimi Code 订阅使用 `k3` 和独立端点，不能混用开放平台 key：
 
 ```sh
 # 已注入对应供应商的 RESUME_AI_API_KEY
 bin/resume-cli score resume.pdf --jd jd.txt --provider kimi \
   --model k3 --base-url https://api.kimi.com/coding/v1
 ```
+
+OpenAI 与 Claude 使用相同的环境变量名，分别注入对应厂商 key：
+
+```sh
+bin/resume-cli score resume.pdf --jd jd.txt --provider openai --model gpt-6-astra
+bin/resume-cli score resume.pdf --jd jd.txt --provider anthropic --model claude-sonnet-5
+# --provider claude 与 anthropic 等价
+```
+
+Claude 使用原生 Messages API 与 output_config.format；OpenAI 使用 Chat Completions 的严格 JSON Schema。模型需支持相应结构化输出接口，支持厂商不代表兼容其所有历史型号。当前支持和单次费用见 [厂商与成本](docs/providers-and-cost.md)。
 
 所有生成供应商统一使用 `RESUME_AI_API_KEY`。默认 single 不读取 Jev key；`--pipeline jev` 额外需要 `TYPESAFE_API_KEY`，可通过 `--jev-model` 覆盖模型。旧 `--pipeline hybrid` 兼容为 jev；`--report` 不再提供，Jev 路线使用本地模板报告。
 
@@ -145,7 +155,7 @@ docker run --rm --network none resume-cli score /examples/resume-zh.pdf \
 - 跨行来源支持连续范围，不自动理解所有多栏顺序、跨页页眉或扫描版面。已移除 16 行引用和 24 项 JD 上限；程序不按条数截断，模型仍可能语义遗漏。资源上限用于控制内存、延迟和调用成本，超限明确报错，详见 [本轮 review 记录](docs/review-fixes-2026-09-21.md)。
 - extract 校验 JSON 结构和空值约定，不用原文子串检查代替语义判断；因此不能保证模型提取没有遗漏或归纳错误。默认评分只做结构与范围校验，不能证明职责覆盖和评论语义准确；可选 Jev 的原文校验也不能证明引用充分。
 - 没有确定性任期合并、精确技能年限推导或批量招聘服务。不得把总工龄当技能年限。
-- 合成回归集不是独立人工标注准确率；真实复杂文档仅有限测试，不声称生产稳定性。未测试 OpenAI、Windows 或高并发。
+- 合成回归集不是独立人工标注准确率；真实复杂文档仅有限测试，不声称生产稳定性。OpenAI/Claude 尚未真实调用，Windows 或高并发未验证。
 - 尚未发布公开仓库或演示视频。原题、真实简历、密钥及中间结果均排除 Git。
 
 历史报告：[早期组合评测](docs/evaluation-results-2026-09-20.md)、[单模型与组合比较](docs/evaluation-single-vs-hybrid-2026-09-20.md)、[跨行修复前的真实简历测试](docs/evaluation-real-resume-2026-09-20.md)。这些记录保留失败，不能与新版本测量混算。第三方信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

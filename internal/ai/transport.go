@@ -137,6 +137,14 @@ func estimate(u *Usage, now time.Time) {
 			return
 		}
 		ip, cp, op = 10, 1, 50
+	case "claude-sonnet-5":
+		ip, cp, op = 2, .2, 10
+	case "claude-opus-5":
+		ip, cp, op = 5, .5, 25
+	case "claude-fable-5-1":
+		ip, cp, op = 10, 1, 50
+	case "claude-haiku-4-5-20251001":
+		ip, cp, op = 1, .1, 5
 	case "kimi-k3":
 		ip, cp, op = 3, .3, 15
 	default:

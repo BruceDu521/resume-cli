@@ -173,7 +173,7 @@ func TestSingleModelNeedsOnlySelectedKey(t *testing.T) {
 		})
 		cmd.SetArgs([]string{"score", filepath.Join(t.TempDir(), "missing.pdf"), "--jd", "../../testdata/jd.txt"})
 		err := cmd.Execute()
-		if err == nil || !strings.Contains(err.Error(), "cannot read input") {
+		if err == nil || !strings.Contains(err.Error(), "文件不存在") {
 			t.Fatalf("%s: %v", provider, err)
 		}
 	}
@@ -203,7 +203,7 @@ func TestLegacyKeysDoNotSelectCredential(t *testing.T) {
 			}
 			return ""
 		})
-		if err == nil || err.Error() != "missing RESUME_AI_API_KEY" {
+		if err == nil || !strings.Contains(err.Error(), "未配置 RESUME_AI_API_KEY") {
 			t.Fatalf("%s: %v", provider, err)
 		}
 	}

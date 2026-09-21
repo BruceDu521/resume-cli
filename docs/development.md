@@ -22,3 +22,9 @@ extract 使用完整文本 + ResumeSchema。score 使用完整文本 + JD，直�
 - 公开仓库、视频与招聘提交尚未完成，无 remote/push。
 - Dockerfile 上次重建曾因 Docker Hub auth EOF 未完成；本次本机测试不代表镜像已重建。
 - OCR、Windows、高并发、确定性任期合并与技能年限未实现或验证。
+
+## CLI 输入错误与帮助（2026-09-21）
+
+常见文件错误使用 fileio.Error：对外显示中文原因与操作建议，Unwrap 保留底层 cause 供 errors.Is/As 使用。PDF 错误带简历角色，JD 错误带岗位描述角色；不打印 Poppler stderr/临时路径。CLI 在读取 key 前验证本地输入，并复用解析结果避免重复运行 Poppler。帮助页补齐命令介绍、例子、所有配置变量与优先级，禁用默认 completion。
+
+bounded 使用命名 buffer 而非嵌入 bytes.Buffer，避免 io.Copy 通过继承的 ReadFrom 绕过 Write 大小限制。离线测试覆盖真实子进程超限、损坏/加密/无文字、错误链保留及常见 CLI 输入失败。

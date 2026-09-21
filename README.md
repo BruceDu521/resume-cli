@@ -88,6 +88,22 @@ bin/resume-cli score resume.pdf --jd jd.txt --provider deepseek --lang en
 
 输出文件权限 0600，默认不可覆盖。stdout 只有结果，日志走 stderr；不记录 key、完整简历或模型原始响应。
 
+## 帮助与常见错误
+
+`resume-cli --help` 列出命令用途、参数示例及环境变量；`resume-cli score --help` 提供评分命令示例。`completion` 是 CLI 框架附带的 Shell 补全脚本生成功能，本项目不提供该命令。
+
+先检查简历和 JD，再配置或调用 AI。常见输入错误给出中文说明和处理建议，写入 stderr，退出码为 1，stdout 不混入错误信息：
+
+```text
+resume-cli: 岗位描述（JD）："jd.none"：文件不存在，请检查路径和文件名。
+resume-cli: 岗位描述（JD）："jd.empty"：文件为空或仅含空白，请填写岗位描述后重试。
+resume-cli: 简历 PDF："resume.pdf"：PDF 无法解析，可能已损坏或格式不受支持；请确认能正常打开，并重新导出 PDF。
+```
+
+还会检查目录误用、读取权限、非 PDF、空 PDF、加密文件、扫描件无文本、UTF-8 编码、文件/文本大小及解析工具缺失。JD 必须是纯文本，PDF 需先转为文本。输出目录不存在、无写入权限或已有文件也会给出提示。常见文件错误不会直接显示 `stat`、内部临时路径或子进程退出信息。
+
+帮助与常见输入错误固定为中文；`--lang en` 只切换评分报告的评语和面试问题语言。AI 请求和字段校验诊断仍保留具体原因。
+
 ## 示例输入与输出
 
 输入见 `testdata/resume-zh.pdf`、`testdata/jd.txt`；示例人物和联系方式均为合成。`extract` 输出姓名、电话、邮箱、城市、education 和 skills；缺失内容为 `""` / `[]`，不填造事实。

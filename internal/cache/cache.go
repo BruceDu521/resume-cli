@@ -62,14 +62,14 @@ func (s Store) Put(key string, v any) error {
 		return nil
 	}
 	if e := os.MkdirAll(s.Dir, 0700); e != nil {
-		return e
+		return fileio.WriteError(s.Dir, e)
 	}
 	info, e := os.Lstat(s.Dir)
 	if e != nil {
-		return e
+		return fileio.WriteError(s.Dir, e)
 	}
 	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return errors.New("cache root must be a directory, not a symlink")
+		return errors.New("缓存路径必须是目录，且不能是符号链接")
 	}
 	data, e := json.Marshal(v)
 	if e != nil {

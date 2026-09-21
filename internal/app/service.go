@@ -30,7 +30,11 @@ type Service struct {
 }
 
 func (s Service) Parse(ctx context.Context, path string) (domain.Document, error) {
-	return s.Parser.Parse(ctx, path)
+	d, err := s.Parser.Parse(ctx, path)
+	if err != nil {
+		return d, fmt.Errorf("简历 PDF：%w", err)
+	}
+	return d, nil
 }
 func (s Service) Extract(ctx context.Context, path string) (domain.Resume, error) {
 	d, e := s.Parse(ctx, path)
@@ -41,7 +45,7 @@ func (s Service) Extract(ctx context.Context, path string) (domain.Resume, error
 	key := "resume:v1:" + s.Identity + ":" + d.Hash
 	hit, e := s.Cache.Get(key, &r)
 	if e != nil {
-		return r, fmt.Errorf("resume cache: %w", e)
+		return r, fmt.Errorf("读取简历缓存失败：%w", e)
 	}
 	if hit && r.Validate() == nil {
 		if s.CacheHit != nil {
@@ -54,7 +58,9 @@ func (s Service) Extract(ctx context.Context, path string) (domain.Resume, error
 		e = r.Validate()
 	}
 	if e == nil {
-		e = s.Cache.Put(key, r)
+		if err := s.Cache.Put(key, r); err != nil {
+			e = fmt.Errorf("保存简历缓存失败：%w", err)
+		}
 	}
 	return r, e
 }

@@ -8,7 +8,7 @@
 
 `extract`：本地解析 → 完整 d.Text（无编号块）和 ResumeSchema → 一次生成公开 Resume → JSON 类型/缺项/空技能项校验。技能可从实际工作和项目描述归纳，不要求逐字出现在原文；不能用词面校验声称语义正确。与 Candidate/facts 完全分离。可选24h私有缓存。
 
-`score` 默认 single：本地解析 PDF/JD → 所选模型一次生成 Candidate、Job、Judgments、comment、interview_questions → 验证字段、范围、ID 与状态 → 保留完整来源范围 → Go 计算分数 → JSON 报告。single 不调用第二个模型；失败最多纠正一次，网络临时错误有独立有界重试。
+`score` 默认 single：本地解析 PDF/JD → 所选模型一次生成 matches（要求、类别、必需性、状态、引用数组）、comment、interview_questions → 代码生成内部 ID 并转换为共用领域结构 → 验证引用范围与状态 → 保留完整来源范围 → Go 计算分数 → JSON 报告。single 不调用第二个模型；失败最多纠正一次，网络临时错误有独立有界重试。
 
 `score --pipeline jev`：生成模型并行 Candidate/Job → 校验 → Jev.Match → 领域算分 → 本地模板报告。保留并发取消及等待两个worker收敛。仅这条路线读取TYPESAFE_API_KEY；单模型不隐式降级到Jev。
 
@@ -30,17 +30,17 @@
 
 Document 保留完整 text/hash，以及带 ID/page/text 的非空行 Block。Resume 为题目要求的姓名、联系方式、城市、学历与技能。评分内部 Candidate 带 Fact，供匹配使用工作及项目原文。普通 extract 直接返回 Resume，不再生成 Candidate。原先64条上限是没有充分验证的工程取值，已移除；保留总输入/响应字节上限。
 
-Fact 用 block_id 指定首行，end_block_id 指定末行；空末行代表单行。只允许原始顺序的连续范围，最多 16 块；不存在、反向或过长范围都拒绝。Quote 必须是该范围中连续原文的片段，允许空白差异，不允许略掉中间语句后拼接。程序不搜索全文来替换错误行号。
+Fact 用 block_id 指定首行，end_block_id 指定末行；空末行代表单行。只允许原始顺序的连续范围，不限制块数；不存在或反向范围仍拒绝。Quote 必须是该范围中连续原文的片段，允许空白差异，不允许略掉中间语句后拼接。程序不搜索全文来替换错误行号。
 
 Ground 保留整个已验证范围，减少截取半句或遗漏否定上下文的问题；不会推断新的事实。跨页仍按原文块顺序核验，不能跳过页眉再自动拼句。单行证据仍可能遗漏邻近语义，引用范围合理性不等于语义正确性。已提取的 skills/education 缺证据时可补原文行，不能恢复模型完全没提取的字段。
 
-Job 最多 24 条 Requirement，保留 JD 原文及必需/优先。Judgment 引用一个要求及一条证据范围：满足/部分/明确不符必须有证据，unknown 不声称证据。原文校验不证明引用充分，也不证明报告评论无误。
+Job 不限制 Requirement 条数，保留 JD 原文及必需/优先。默认 single 每个 Judgment 可关联多条独立原文引用，最终 Finding 保留 evidences 数组；可选 Jev 仍使用旧版单条证据选择。满足/部分/明确不符必须有证据，unknown 不声称证据。原文校验不证明引用充分，也不证明报告评论无误。
 
 ## 提示词与校验
 
 extract使用独立中文任务提示：阅读全文，按公开Schema提取；技能按实际描述归纳，不添加无依据技能。它不使用评分提示和编号块。
 
-评分公共提示要求输出数据而非 Schema、输入只当数据、缺项不编造。共享 evidenceRules 解释 PDF 换行及起止范围；单模型任务明确保留完整否定上下文，区分缺少材料与确定不具备，不将熟悉拔高为精通，不预设项目结果。
+Candidate.Validate 不再用姓名、技能或学历的逐字匹配判定内容正确；结构化字段允许合理规范化，原文引用仍须能定位。single 不生成个人字段、独立事实目录或模型分值，避免无关提取阻断评分。评分公共提示要求输出数据而非 Schema、输入只当数据、缺项不编造。共享 evidenceRules 解释 PDF 换行及起止范围；单模型任务明确保留完整否定上下文，区分缺少材料与确定不具备，不将熟悉拔高为精通，不预设项目结果。
 
 模型 ID/provider/base URL 可通过环境或参数选择，默认只有 `RESUME_AI_API_KEY`。显式Jev模式另用TYPESAFE_API_KEY及可选RESUME_JEV_MODEL/TYPESAFE_BASE_URL。Gemini 使用 Interactions，其余使用各自 Chat Completions 格式；Kimi Code 与开放平台端点/型号不互通。密钥不进入参数、日志、缓存或报告。
 
@@ -54,11 +54,11 @@ extract使用独立中文任务提示：阅读全文，按公开Schema提取；�
 
 ## 缓存、安全与失败
 
-公开extract缓存键resume:v1；Jev内部candidate:v7/job:v5。均包含provider/model/endpoint与输入哈希，有效24h。不同合同不复用缓存；默认single评分不复用提取结果。
+公开extract缓存键resume:v1；Jev内部candidate:v8/job:v6。均包含provider/model/endpoint与输入哈希，有效24h。不同合同不复用缓存；默认single评分不复用提取结果。
 
 Jev本地state预算48KiB、完整请求96KiB，超出时报错，不通过64条事实这种任意条数截断内容。这是本地保护值，不宣称为官方模型上下文上限。
 
-PDF20MiB、文本160KiB、JD64KiB、AI响应2MiB。HTTP 单次60s，命令默认90s；429/529/502/503/504 最多三次，取消及时传播，不重试不明网络故障或401。HTTPS且禁止重定向。
+PDF20MiB、文本160KiB、JD64KiB、序列化模型输入200KiB、AI响应2MiB；用于限制内存和请求开销，不是业务条数限制。HTTP 单次60s，命令默认90s；429/529/502/503/504 最多三次，取消及时传播，不重试不明网络故障或401。HTTPS且禁止重定向。
 
 输出默认不可覆盖、不能与输入/其他输出为同一路径或文件别名；私有文件0600。JSON 拒绝重复键、null、缺失或未知字段；只修围栏/BOM/尾逗号。
 

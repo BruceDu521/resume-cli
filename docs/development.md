@@ -6,9 +6,9 @@
 
 用户质疑了公共提取任务中的编号块与64条事实。当前 public extract 独立用完整 d.Text + ResumeSchema，只输出 name/phone/email/city/education/skills，依据工作及项目实际描述整理技能，不生成facts/block_id。只校验结构与空值约定，不将技能名称逐字匹配原文当作语义正确性。独立Extractor接口及resume:v1缓存，避免复用旧Candidate缓存。
 
-评分内部保留来源可追溯，b1/b2是代码给Poppler输出非空行添加的序号，不是PDF段落，模型原先收到全部行而非某64行。64条事实是先前未经充分验证的工程取值，现已从prompt和领域验证中移除；保留总字节及Jev请求预算。Jev内部candidate:v7/job:v5缓存；当前64KiB JD上限与64条事实是不同概念。
+评分内部保留来源可追溯，b1/b2是代码给Poppler输出非空行添加的序号，不是PDF段落，模型原先收到全部行而非某64行。64条事实是先前未经充分验证的工程取值，现已从prompt和领域验证中移除；保留总字节及Jev请求预算。Jev内部candidate:v8/job:v6缓存；当前64KiB JD上限与64条事实是不同概念。
 
-score single一次生成结构/判断/报告，必要时最多纠正一次。Jev路线独立Candidate/Job并行后Match，保留取消及等待worker退出；报告本地模板，无额外AI报告调用。EndBlockID跨行原文范围保留，最多16个连续块，这是评分工程边界，不用于public extract。
+score single只生成matches（每项带引用数组）/comment/interview_questions，代码生成内部ID，不提取个人字段。必要时最多纠正一次。Jev路线独立Candidate/Job并行后Match，保留取消及等待worker退出；报告本地模板，无额外AI报告调用。EndBlockID跨行原文范围保留，不限制行数；不再限制24项JD要求。默认single支持一项要求多处不连续引用，可选Jev保留旧单证据选择。
 
 ## 测试与配置
 
@@ -26,3 +26,7 @@ RESUME_AI_API_KEY为所选生成供应商key，主.env当前DS且RESUME_AI_PIPEL
 - Dockerfile最近重建因Docker Hub auth EOF未完成；上一轮已有镜像挂载当时新Linux二进制禁网运行通过，不代表当前版本重新构建成功。
 - 公开GitHub仓库、演示视频、招聘提交未完成；无remote/push。
 - Windows、OpenAI、高并发、OCR、确定性技能年限/任职区间未验证或实现。
+
+## 本轮 review 收尾
+
+详见 [修复及限制](review-fixes-2026-09-21.md)。全包离线 race 单测和 vet 通过；仅执行一次 Gemini 真实评分，无纠正重试，模型调用6.912秒、CLI6.958秒、评测脚本墙钟9.235秒。5项要求均保留，实际输出多处引用；评论仍无依据写了“全日制”，不把流程成功视为语义准确。结果位于.local/real-resume/review-single-v1/，无后台进程，不追加批量评测。

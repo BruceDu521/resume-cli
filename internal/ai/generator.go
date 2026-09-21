@@ -40,7 +40,7 @@ func (r *Remote) Generate(ctx context.Context, q Request) ([]byte, Usage, error)
 		return nil, u, e
 	}
 	if len(state) > 200<<10 {
-		return nil, u, errors.New("model input exceeds size limit")
+		return nil, u, errors.New("model input exceeds local serialized input budget (200 KiB); input was not truncated")
 	}
 	if r.Provider == "gemini" {
 		body := map[string]any{"model": r.Model, "system_instruction": q.Instruction, "input": string(state), "store": false, "response_format": map[string]any{"type": "text", "mime_type": "application/json", "schema": q.Schema}, "generation_config": map[string]any{"thinking_level": "low", "max_output_tokens": 12000}}

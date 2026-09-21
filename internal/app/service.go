@@ -43,7 +43,7 @@ func (s Service) Parse(ctx context.Context, path string) (domain.Document, error
 }
 func (s Service) candidate(ctx context.Context, d domain.Document) (domain.Candidate, error) {
 	var c domain.Candidate
-	key := "candidate:v7:" + s.Identity + ":" + d.Hash
+	key := "candidate:v8:" + s.Identity + ":" + d.Hash
 	hit, e := s.Cache.Get(key, &c)
 	if e != nil {
 		return c, fmt.Errorf("candidate cache: %w", e)
@@ -67,7 +67,7 @@ func (s Service) candidate(ctx context.Context, d domain.Document) (domain.Candi
 }
 func (s Service) job(ctx context.Context, text string) (domain.Job, error) {
 	var j domain.Job
-	key := "job:v5:" + s.Identity + ":" + domain.Digest(text)
+	key := "job:v6:" + s.Identity + ":" + domain.Digest(text)
 	hit, e := s.Cache.Get(key, &j)
 	if e != nil {
 		return j, fmt.Errorf("job cache: %w", e)
@@ -178,16 +178,13 @@ func (s Service) Score(ctx context.Context, path, jd, lang string) (report.Resul
 			return report.Result{}, e
 		}
 	}
-	if len(c.Facts) == 0 {
-		return report.Result{}, errors.New("no assessable resume evidence; refusing to score an empty extraction")
-	}
 	a, e := domain.Aggregate(c, job, judgments)
 	if e != nil {
 		return report.Result{}, e
 	}
 	r := report.Render(a, lang, s.Mock)
 	if s.Evaluator != nil {
-		if comment == "" || len(questions) < 1 || len(questions) > 3 {
+		if comment == "" || len(questions) < 1 {
 			return report.Result{}, errors.New("invalid assessment report")
 		}
 		r.Comment = comment

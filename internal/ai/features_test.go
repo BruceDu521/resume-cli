@@ -13,25 +13,20 @@ import (
 
 func TestAssessmentContract(t *testing.T) {
 	d := domain.NewDocument("Alice\nGo")
-	v := map[string]any{"candidate": domain.Candidate{Resume: domain.Resume{Name: "Alice", Education: []domain.Education{}, Skills: []string{"Go"}}, Facts: []domain.Fact{{ID: "f1", Category: "skill", BlockID: "b2", Quote: "Go"}}}, "job": domain.Job{Requirements: []domain.Requirement{{ID: "r1", Category: "skill", Text: "Go", Required: true}}}, "judgments": []domain.Judgment{{RequirementID: "r1", Status: "partial", Score: 90, EvidenceID: "f1", Confidence: .8}}, "comment": "Partial evidence", "interview_questions": []string{"Describe the work?"}}
-	s := Structurer{Generator: fakeGenerator{value: v}}
-	c, j, a, comment, q, e := s.Evaluate(context.Background(), d, "Go", "en")
-	if e != nil || c.Validate(d) != nil || j.Validate("Go") != nil || a[0].Score != 50 || comment == "" || len(q) != 1 {
-		t.Fatal(c, j, a, e)
+	v := evaluation{Matches: []match{{Requirement: "Go", Category: "skill", Required: true, Status: "partial", Evidence: []citation{{BlockID: "b2", Quote: "Go"}}}}, Comment: "Partial evidence", Questions: []string{"Describe the work?"}}
+	good, _ := json.Marshal(v)
+	bad := strings.Replace(string(good), `"quote":"Go"`, `"quote":"Rust"`, 1)
+	g := &sequenceGenerator{bodies: []string{bad, string(good)}}
+	c, j, a, comment, q, e := (Structurer{Generator: g}).Evaluate(context.Background(), d, "Go", "en")
+	if e != nil || len(a) != 1 || a[0].Score != 50 || comment == "" || len(q) != 1 || g.calls != 2 {
+		t.Fatal(a, e)
 	}
-	// The common policy, not the baseline model, controls the final numbers.
 	result, e := domain.Aggregate(c, j, a)
 	if e != nil || result.Overall != 50 {
 		t.Fatal(result, e)
 	}
-	good, _ := json.Marshal(v)
-	bad := strings.Replace(string(good), `"quote":"Go"`, `"quote":"Rust"`, 1)
-	g := &sequenceGenerator{bodies: []string{bad, string(good)}}
-	stages := []string{}
-	s = Structurer{Generator: g, Observe: func(u Usage) { stages = append(stages, u.Stage) }}
-	_, _, _, _, _, e = s.Evaluate(context.Background(), d, "Go", "en")
-	if e != nil || g.calls != 2 || stages[1] != "assessment_validation_retry" {
-		t.Fatal("single-model source validation must use the bounded correction", stages, e)
+	if g.requests[1].Stage != "assessment_validation_retry" {
+		t.Fatal("missing bounded correction")
 	}
 }
 func TestMockRestrictions(t *testing.T) {
@@ -111,18 +106,17 @@ func TestMissingTokenCountsAreUnknown(t *testing.T) {
 }
 
 func TestAssessmentWrappedCitation(t *testing.T) {
-	d := domain.NewDocument("Alice\nBuilt deployment and\nrecovery tooling.\nNo Rust\nproduction experience.")
-	c := domain.Candidate{Resume: domain.Resume{Name: "Alice", Education: []domain.Education{}, Skills: []string{}}, Facts: []domain.Fact{{ID: "f", Category: "experience", BlockID: "b4", EndBlockID: "b5", Quote: "No Rust production experience."}}}
-	v := map[string]any{"candidate": c, "job": domain.Job{Requirements: []domain.Requirement{{ID: "r", Category: "experience", Text: "Rust production experience", Required: true}}}, "judgments": []domain.Judgment{{RequirementID: "r", Status: "unmet", EvidenceID: "f", Confidence: 1}}, "comment": "The resume explicitly denies this experience.", "interview_questions": []string{"What relevant projects have you done?"}}
+	d := domain.NewDocument("Alice\nNo Rust\nproduction experience.")
+	v := evaluation{Matches: []match{{Requirement: "Rust production experience", Category: "experience", Required: true, Status: "unmet", Evidence: []citation{{BlockID: "b2", EndBlockID: "b3", Quote: "No Rust production experience."}}}}, Comment: "Explicit denial", Questions: []string{"What other work?"}}
 	st := Structurer{Generator: fakeGenerator{value: v}}
 	got, _, _, _, _, err := st.Evaluate(context.Background(), d, "Rust production experience", "en")
-	if err != nil || got.Facts[0].EndBlockID != "b5" {
+	if err != nil || got.Facts[0].EndBlockID != "b3" {
 		t.Fatal(got, err)
 	}
-	c.Facts[0].EndBlockID = ""
-	v["candidate"] = c
+	v.Matches[0].Evidence[0].EndBlockID = ""
+	st.Generator = fakeGenerator{value: v}
 	_, _, _, _, _, err = st.Evaluate(context.Background(), d, "Rust production experience", "en")
 	if err == nil || !strings.Contains(err.Error(), "declared source range") {
-		t.Fatal("wrong range accepted or error hidden", err)
+		t.Fatal(err)
 	}
 }

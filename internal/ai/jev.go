@@ -56,7 +56,7 @@ func (j Jev) Match(ctx context.Context, c domain.Candidate, job domain.Job) ([]d
 	state := map[string]any{"facts": c.Facts, "requirements": job.Requirements}
 	b, _ := json.Marshal(state)
 	if len(b) > 48<<10 {
-		return nil, errors.New("Jev evidence state exceeds local context budget")
+		return nil, errors.New("Jev evidence state exceeds local context budget (48 KiB); evidence was not truncated")
 	}
 	questions := map[string]any{}
 	options := map[string]map[string]any{}
@@ -76,7 +76,7 @@ func (j Jev) Match(ctx context.Context, c domain.Candidate, job domain.Job) ([]d
 	body := map[string]any{"model": j.Model, "state": state, "questions": questions}
 	encoded, _ := json.Marshal(body)
 	if len(encoded) > 96<<10 {
-		return nil, errors.New("Jev question batch exceeds local context budget")
+		return nil, errors.New("Jev question batch exceeds local request budget (96 KiB); questions were not truncated")
 	}
 	var response struct {
 		Model   string            `json:"model"`

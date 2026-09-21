@@ -39,7 +39,7 @@ for trial in sorted(root.glob('*/review.json')):
     if r['category']!=cat:issues.append(f'category {pattern}: {r["category"]}, expected {cat}')
     if r['required']!=required:issues.append('required/preferred mismatch: '+pattern)
     if j['status'] not in states:issues.append(f'status {pattern}: {j["status"]}')
-    if j['status']!='unknown' and not f.get('evidence'):issues.append('missing source evidence: '+pattern)
+    if j['status']!='unknown' and not (f.get('evidence') or f.get('evidences')):issues.append('missing source evidence: '+pattern)
     if j.get('review_reason'):review_flags.append(pattern+': '+j['review_reason'])
   if len(covered)!=len(findings):issues.append('unexpected/unmapped requirement')
   if len(d['interview_questions']) not in range(1,4) or not d['comment'].strip():issues.append('invalid report')

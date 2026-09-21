@@ -88,17 +88,19 @@ type Job struct {
 	Requirements []Requirement `json:"requirements"`
 }
 type Judgment struct {
-	RequirementID string  `json:"requirement_id"`
-	Status        string  `json:"status"`
-	Score         float64 `json:"score"`
-	EvidenceID    string  `json:"evidence_id"`
-	Confidence    float64 `json:"confidence"`
-	ReviewReason  string  `json:"review_reason,omitempty"`
+	RequirementID string   `json:"requirement_id"`
+	Status        string   `json:"status"`
+	Score         float64  `json:"score"`
+	EvidenceID    string   `json:"evidence_id,omitempty"`
+	EvidenceIDs   []string `json:"evidence_ids,omitempty"`
+	Confidence    float64  `json:"confidence,omitempty"`
+	ReviewReason  string   `json:"review_reason,omitempty"`
 }
 type Finding struct {
 	Requirement Requirement `json:"requirement"`
 	Judgment    Judgment    `json:"judgment"`
 	Evidence    *Fact       `json:"evidence,omitempty"`
+	Evidences   []Fact      `json:"evidences,omitempty"`
 }
 type Assessment struct {
 	Overall     int       `json:"overall_score"`
@@ -129,20 +131,8 @@ func (c Candidate) Validate(d Document) error {
 	if c.Resume.Education == nil || c.Resume.Skills == nil || c.Facts == nil {
 		return errors.New("candidate collections must be arrays")
 	}
-	type sourceField struct{ path, value string }
-	values := []sourceField{{"name", c.Resume.Name}, {"phone", c.Resume.Phone}, {"email", c.Resume.Email}, {"city", c.Resume.City}}
-	for i, v := range c.Resume.Skills {
-		values = append(values, sourceField{fmt.Sprintf("skills[%d]", i), v})
-	}
-	for i, e := range c.Resume.Education {
-		for _, v := range []sourceField{{"school", e.School}, {"major", e.Major}, {"degree", e.Degree}, {"graduation_time", e.GraduationTime}} {
-			values = append(values, sourceField{fmt.Sprintf("education[%d].%s", i, v.path), v.value})
-		}
-	}
-	for _, v := range values {
-		if v.value != "" && !Contains(d.Text, v.value) {
-			return fmt.Errorf("candidate resume.%s is not supported by source text; copy its original spelling and date format", v.path)
-		}
+	if err := c.Resume.Validate(); err != nil {
+		return err
 	}
 	seen := map[string]bool{}
 	for _, f := range c.Facts {
@@ -177,8 +167,8 @@ func (d Document) EvidenceText(f Fact) (string, error) {
 			end = i
 		}
 	}
-	if start < 0 || end < start || end-start >= 16 {
-		return "", errors.New("candidate evidence requires a valid range of 1 to 16 adjacent blocks")
+	if start < 0 || end < start {
+		return "", errors.New("candidate evidence requires a valid ordered source range")
 	}
 	lines := make([]string, 0, end-start+1)
 	for _, b := range d.Blocks[start : end+1] {
@@ -240,8 +230,8 @@ func (c Candidate) Ground(d Document) (Candidate, error) {
 	return c, c.Validate(d)
 }
 func (j Job) Validate(text string) error {
-	if len(j.Requirements) == 0 || len(j.Requirements) > 24 {
-		return errors.New("JD must contain 1 to 24 assessable requirements")
+	if len(j.Requirements) == 0 {
+		return errors.New("JD must contain at least one assessable requirement")
 	}
 	seen := map[string]bool{}
 	for _, r := range j.Requirements {
@@ -280,12 +270,28 @@ func Aggregate(c Candidate, j Job, judgments []Judgment) (Assessment, error) {
 		if v.Status != "satisfied" && v.Status != "partial" && v.Status != "unmet" && v.Status != "unknown" {
 			return a, errors.New("invalid evidence status")
 		}
-		f, has := facts[v.EvidenceID]
-		if v.Status != "unknown" && !has {
+		ids := v.EvidenceIDs
+		if v.EvidenceID != "" {
+			if len(ids) > 0 {
+				return a, errors.New("use evidence_ids or legacy evidence_id, not both")
+			}
+			ids = []string{v.EvidenceID}
+		}
+		if v.Status != "unknown" && len(ids) == 0 {
 			return a, errors.New("judgment requires source evidence")
 		}
-		if v.Status == "unknown" && v.EvidenceID != "" {
+		if v.Status == "unknown" && len(ids) > 0 {
 			return a, errors.New("unknown judgment must not claim evidence")
+		}
+		evidence := []Fact{}
+		seenEvidence := map[string]bool{}
+		for _, id := range ids {
+			f, ok := facts[id]
+			if !ok || seenEvidence[id] {
+				return a, errors.New("invalid or duplicate judgment evidence reference")
+			}
+			seenEvidence[id] = true
+			evidence = append(evidence, f)
 		}
 		// Do not let numerical uncertainty give unsupported claims positive credit.
 		if v.Status == "unknown" || v.Status == "unmet" {
@@ -298,9 +304,11 @@ func Aggregate(c Candidate, j Job, judgments []Judgment) (Assessment, error) {
 		sums[r.Category] += v.Score * w
 		weights[r.Category] += w
 		finding := Finding{Requirement: r, Judgment: v}
-		if has {
-			copy := f
+		if v.EvidenceID != "" {
+			copy := evidence[0]
 			finding.Evidence = &copy
+		} else if len(evidence) > 0 {
+			finding.Evidences = evidence
 		}
 		a.Findings = append(a.Findings, finding)
 	}

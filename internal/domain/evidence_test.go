@@ -47,22 +47,20 @@ func TestExplicitWrappedEvidence(t *testing.T) {
 		})
 	}
 	d = NewDocument(strings.Repeat("line\n", 17))
-	if _, err := d.EvidenceText(Fact{BlockID: "b1", EndBlockID: "b17"}); err == nil {
-		t.Fatal("unbounded evidence")
+	if _, err := d.EvidenceText(Fact{BlockID: "b1", EndBlockID: "b17"}); err != nil {
+		t.Fatal("arbitrary line cap", err)
 	}
 }
 
-func TestSourceFieldErrorsDoNotRevealValues(t *testing.T) {
-	c := Candidate{Resume: Resume{Name: "sensitive-name", Education: []Education{}, Skills: []string{}}, Facts: []Fact{}}
-	err := c.Validate(NewDocument("Alice"))
-	if err == nil || !strings.Contains(err.Error(), "resume.name") || strings.Contains(err.Error(), "sensitive-name") {
+func TestNormalizedFieldsDoNotFailSourceValidation(t *testing.T) {
+	d := NewDocument("Alice\nUsed golang\nGraduated 2015.06")
+	c := Candidate{Resume: Resume{Name: "Alice", Skills: []string{"Go"}, Education: []Education{{GraduationTime: "2015-06"}}}, Facts: []Fact{{ID: "f", Category: "skill", BlockID: "b2", Quote: "Used golang"}}}
+	if err := c.Validate(d); err != nil {
 		t.Fatal(err)
 	}
-	c.Resume.Name = "Alice"
-	c.Resume.Education = []Education{{GraduationTime: "2099-01"}}
-	err = c.Validate(NewDocument("Alice\n2099.01"))
-	if err == nil || !strings.Contains(err.Error(), "education[0].graduation_time") || strings.Contains(err.Error(), "2099") {
-		t.Fatal(err)
+	c.Facts[0].Quote = "Used Go"
+	if err := c.Validate(d); err == nil {
+		t.Fatal("normalized fields must not permit rewritten quotations")
 	}
 }
 

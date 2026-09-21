@@ -76,9 +76,9 @@ func TestBoundedFormatRegeneration(t *testing.T) {
 }
 
 func TestCorrectionIncludesSafeReasonOnly(t *testing.T) {
-	c := domain.Candidate{Resume: domain.Resume{Name: "private-invented-name", Education: []domain.Education{}, Skills: []string{}}, Facts: []domain.Fact{}}
+	c := domain.Candidate{Resume: domain.Resume{Name: "Alice", Education: []domain.Education{}, Skills: []string{}}, Facts: []domain.Fact{{ID: "f", Category: "skill", BlockID: "b1", Quote: "private-invented-quote"}}}
 	bad, _ := json.Marshal(c)
-	c.Resume.Name = "Alice"
+	c.Facts[0].Quote = "Alice"
 	good, _ := json.Marshal(c)
 	g := &sequenceGenerator{bodies: []string{string(bad), string(good)}}
 	_, err := (Structurer{Generator: g}).Candidate(context.Background(), domain.NewDocument("Alice"))
@@ -86,7 +86,7 @@ func TestCorrectionIncludesSafeReasonOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	prompt := g.requests[1].Instruction
-	if !strings.Contains(prompt, "resume.name") || strings.Contains(prompt, "private-invented-name") {
+	if !strings.Contains(prompt, "declared source range") || strings.Contains(prompt, "private-invented-quote") {
 		t.Fatal("unsafe or missing validation reason")
 	}
 }

@@ -83,8 +83,8 @@ func TestCandidateEvidence(t *testing.T) {
 	}
 	c.Facts = []Fact{}
 	c.Resume.Name = "别的人"
-	if c.Validate(d) == nil {
-		t.Fatal("invented name")
+	if c.Validate(d) != nil {
+		t.Fatal("profile wording must not block scoring")
 	}
 }
 func TestJobValidation(t *testing.T) {
@@ -118,7 +118,7 @@ func TestGroundPreservesContextAndMissingProfileEvidence(t *testing.T) {
 		t.Fatal("profile evidence omitted", got, err)
 	}
 	c.Resume.Skills = []string{"invented skill"}
-	if _, err = c.Ground(d); err == nil {
-		t.Fatal("fabricated skill accepted")
+	if got, err = c.Ground(d); err != nil || len(got.Facts) != 1 {
+		t.Fatal("profile text must not fabricate evidence", got, err)
 	}
 }

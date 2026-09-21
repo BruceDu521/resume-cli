@@ -3,66 +3,86 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"resume-cli/internal/domain"
 	"strings"
 	"testing"
+
+	"resume-cli/internal/domain"
+	"resume-cli/internal/report"
 )
 
-func TestSingleScoreKeepsManyRequirementsAndDistributedEvidence(t *testing.T) {
-	d := domain.NewDocument("Project A: built APIs using golang.\nUnrelated job\nProject B: operated PostgreSQL backups.")
-	v := evaluation{Matches: []match{}, Comment: "Both projects provide relevant evidence.", Questions: []string{"Explain how the systems interacted?"}}
-	requirements := []string{}
+func validEvaluation() report.Evaluation {
+	return report.Evaluation{Overall: 75, Skill: 80, Experience: 65, Education: 100, Comment: "Backend experience is supported; frontend scope needs confirmation.", Questions: []string{"Describe your frontend responsibilities?"}}
+}
+func TestSingleScoreUsesCompleteTextWithoutCitationContract(t *testing.T) {
+	d := domain.NewDocument("Project A: golang APIs.\nProject B: PostgreSQL backups.")
+	lines := []string{}
 	for i := 0; i < 30; i++ {
-		text := fmt.Sprintf("Requirement %d: Go and PostgreSQL", i+1)
-		requirements = append(requirements, text)
-		v.Matches = append(v.Matches, match{Requirement: text, Category: "skill", Required: true, Status: "satisfied", Evidence: []citation{
-			{BlockID: "b1", Quote: "built APIs using golang"},
-			{BlockID: "b3", Quote: "operated PostgreSQL backups"},
-		}})
+		lines = append(lines, fmt.Sprintf("Requirement %d: Go and PostgreSQL", i))
 	}
-	g := &sequenceGenerator{}
-	// Capture the actual schema and number of requests: no correction should be
-	// triggered by golang -> Go reasoning, 30 requirements or disjoint citations.
-	data := mustJSON(t, v)
-	g.bodies = []string{data}
-	c, j, judgments, _, _, err := (Structurer{Generator: g}).Evaluate(context.Background(), d, strings.Join(requirements, "\n"), "en")
-	if err != nil || g.calls != 1 || len(j.Requirements) != 30 || len(judgments) != 30 {
-		t.Fatal(len(j.Requirements), g.calls, err)
+	jd := strings.Join(lines, "\n")
+	v := validEvaluation()
+	g := &sequenceGenerator{bodies: []string{mustJSON(t, v)}}
+	got, err := (Structurer{Generator: g}).Evaluate(context.Background(), d, jd, "zh")
+	if err != nil || g.calls != 1 || got.Overall != 75 {
+		t.Fatal(got, g.calls, err)
+	}
+	state := g.requests[0].State.(map[string]any)
+	if len(state) != 2 || state["resume_text"] != d.Text || state["jd"] != jd {
+		t.Fatal("input changed or truncated")
 	}
 	props := g.requests[0].Schema["properties"].(map[string]any)
-	if len(props) != 3 || props["matches"] == nil || props["candidate"] != nil || props["resume"] != nil {
-		t.Fatal("unnecessary model output", props)
+	if len(props) != 6 || props["matches"] != nil || props["candidate"] != nil {
+		t.Fatal(props)
 	}
-	if c.Resume.Name != "" || c.Resume.Phone != "" {
-		t.Fatal("single scoring depends on profile extraction")
+}
+func TestScoreRejectsInvalidAndEmptyOutput(t *testing.T) {
+	v := validEvaluation()
+	for _, raw := range []string{`{"comment":"x","interview_questions":["Q?"]","matches":[]}`, `{"comment":"x","interview_questions":["Q?"],"matches":[]}`, `{}`, strings.Replace(mustJSON(t, v), `"overall_score":75`, `"overall_score":null`, 1), strings.Replace(mustJSON(t, v), `"overall_score":75`, `"overall_score":75.5`, 1)} {
+		g := &sequenceGenerator{bodies: []string{raw}}
+		if _, err := (Structurer{Generator: g}).Evaluate(context.Background(), domain.NewDocument("Go"), "Go", "zh"); err == nil || g.calls != 2 {
+			t.Fatal("invalid output accepted", err)
+		}
 	}
-	a, err := domain.Aggregate(c, j, judgments)
-	if err != nil || len(a.Findings) != 30 || len(a.Findings[0].Evidences) != 2 {
-		t.Fatal(a, err)
-	}
-	if a.Findings[0].Evidences[0].BlockID != "b1" || a.Findings[0].Evidences[1].BlockID != "b3" {
-		t.Fatal("disjoint evidence lost")
-	}
-	v.Matches[0].Evidence[1].Quote = "invented backup experience"
-	if _, _, _, err := v.assessment(d, strings.Join(requirements, "\n")); err == nil {
-		t.Fatal("invented quotation accepted")
+	g := &sequenceGenerator{}
+	if _, err := (Structurer{Generator: g}).Evaluate(context.Background(), domain.NewDocument("Go"), " ", "zh"); err == nil || g.calls != 0 {
+		t.Fatal("empty JD sent")
 	}
 }
 
-func TestSingleScoreAllowsAllRequirementsUnknown(t *testing.T) {
-	d := domain.NewDocument("No relevant qualifications described")
-	v := evaluation{Matches: []match{{Requirement: "Rust", Category: "skill", Required: true, Status: "unknown", Evidence: []citation{}}}, Comment: "Resume does not establish Rust.", Questions: []string{"Have you used Rust?"}}
-	c, j, judgments, _, _, err := (Structurer{Generator: fakeGenerator{value: v}}).Evaluate(context.Background(), d, "Rust", "en")
-	if err != nil {
+type correctionFailure struct {
+	calls        int
+	transportErr error
+}
+
+func (g *correctionFailure) Identity() string { return "offline" }
+func (g *correctionFailure) Generate(context.Context, Request) ([]byte, Usage, error) {
+	g.calls++
+	if g.calls == 1 {
+		return []byte(`{"private":"do-not-echo"}`), Usage{}, nil
+	}
+	return nil, Usage{}, g.transportErr
+}
+func TestCorrectionFailurePreservesOriginalReason(t *testing.T) {
+	cause := errors.New("synthetic transport failure")
+	g := &correctionFailure{transportErr: cause}
+	_, err := (Structurer{Generator: g}).Evaluate(context.Background(), domain.NewDocument("Go"), "Go", "zh")
+	if !errors.Is(err, cause) || !strings.Contains(err.Error(), "invalid JSON structure") || !strings.Contains(err.Error(), "corrective request failed") || strings.Contains(err.Error(), "do-not-echo") {
 		t.Fatal(err)
 	}
-	a, err := domain.Aggregate(c, j, judgments)
-	if err != nil || a.Overall != 0 {
+}
+func TestDistributedEvidenceStillSupportedByDomain(t *testing.T) {
+	d := domain.NewDocument("golang APIs\nUnrelated\nPostgreSQL backups")
+	c := domain.Candidate{Resume: domain.Resume{Education: []domain.Education{}, Skills: []string{"Go"}}, Facts: []domain.Fact{{ID: "a", Category: "skill", BlockID: "b1", Quote: "golang APIs"}, {ID: "b", Category: "skill", BlockID: "b3", Quote: "PostgreSQL backups"}}}
+	if err := c.Validate(d); err != nil {
+		t.Fatal(err)
+	}
+	a, err := domain.Aggregate(c, domain.Job{Requirements: []domain.Requirement{{ID: "r", Category: "skill", Text: "Go and PostgreSQL", Required: true}}}, []domain.Judgment{{RequirementID: "r", Status: "satisfied", Score: 100, EvidenceIDs: []string{"a", "b"}}})
+	if err != nil || len(a.Findings[0].Evidences) != 2 {
 		t.Fatal(a, err)
 	}
 }
-
 func mustJSON(t *testing.T, v any) string {
 	t.Helper()
 	b, e := json.Marshal(v)

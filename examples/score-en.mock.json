@@ -3,73 +3,7 @@
   "skill_score": 100,
   "experience_score": 50,
   "education_score": 100,
-  "not_required": [],
-  "findings": [
-    {
-      "requirement": {
-        "id": "dev",
-        "category": "skill",
-        "text": "Go / PostgreSQL development",
-        "required": true
-      },
-      "judgment": {
-        "requirement_id": "dev",
-        "status": "satisfied",
-        "score": 100,
-        "evidence_id": "dev",
-        "confidence": 1
-      },
-      "evidence": {
-        "id": "dev",
-        "category": "skill",
-        "block_id": "b5",
-        "quote": "Go / PostgreSQL backend development, 2022-2025"
-      }
-    },
-    {
-      "requirement": {
-        "id": "ops",
-        "category": "experience",
-        "text": "Kubernetes production operations",
-        "required": true
-      },
-      "judgment": {
-        "requirement_id": "ops",
-        "status": "partial",
-        "score": 50,
-        "evidence_id": "ops",
-        "confidence": 1
-      },
-      "evidence": {
-        "id": "ops",
-        "category": "experience",
-        "block_id": "b6",
-        "quote": "Kubernetes deployment; no production incident ownership."
-      }
-    },
-    {
-      "requirement": {
-        "id": "edu",
-        "category": "education",
-        "text": "Bachelor",
-        "required": true
-      },
-      "judgment": {
-        "requirement_id": "edu",
-        "status": "satisfied",
-        "score": 100,
-        "evidence_id": "edu",
-        "confidence": 1
-      },
-      "evidence": {
-        "id": "edu",
-        "category": "education",
-        "block_id": "b4",
-        "quote": "Example University | Software Engineering | Bachelor | 2022"
-      }
-    }
-  ],
-  "policy_version": "evidence-v1",
+  "policy_version": "model-assessment-v1",
   "comment": "Evidence supports [Go / PostgreSQL development]. Evidence partially supports [Kubernetes production operations]; scope and depth need confirmation. Evidence supports [Bachelor].",
   "interview_questions": [
     "Which parts of [Kubernetes production operations] have you personally handled, and in what environment?"

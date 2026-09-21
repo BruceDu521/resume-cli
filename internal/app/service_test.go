@@ -5,6 +5,7 @@ import (
 	"errors"
 	"resume-cli/internal/cache"
 	"resume-cli/internal/domain"
+	"resume-cli/internal/report"
 	"testing"
 )
 
@@ -36,16 +37,21 @@ func (m *model) Candidate(ctx context.Context, d domain.Document) (domain.Candid
 	}
 	return c, nil
 }
-func (m *model) Evaluate(ctx context.Context, d domain.Document, jd, lang string) (domain.Candidate, domain.Job, []domain.Judgment, string, []string, error) {
-	c, e := m.Candidate(ctx, d)
-	j := domain.Job{Requirements: []domain.Requirement{{ID: "r", Category: "skill", Text: "Go", Required: true}}}
-	v := []domain.Judgment{{RequirementID: "r", Status: "satisfied", Score: 100, EvidenceID: "f", Confidence: 1}}
-	comment := "Evidence supports Go"
-	if m.badReport {
-		comment = ""
+func (m *model) Evaluate(ctx context.Context, d domain.Document, jd, lang string) (report.Evaluation, error) {
+	m.calls++
+	if ctx.Err() != nil {
+		return report.Evaluation{}, ctx.Err()
 	}
-	return c, j, v, comment, []string{"Describe your work?"}, e
+	v := report.Evaluation{Overall: 100, Skill: 100, Experience: 100, Education: 100, Comment: "Evidence supports Go", Questions: []string{"Describe your work?"}}
+	if m.empty {
+		v.Questions = nil
+	}
+	if m.badReport {
+		v.Comment = ""
+	}
+	return v, m.err
 }
+
 func TestExtractCacheAndIndependentScore(t *testing.T) {
 	m := &model{}
 	s := Service{Parser: parser{d: domain.NewDocument("Alice\nGo")}, Extractor: m, Structurer: m, Evaluator: m, Cache: cache.Store{Dir: t.TempDir()}, Identity: "synthetic"}

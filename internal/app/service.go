@@ -24,7 +24,7 @@ type Matcher interface {
 	Match(context.Context, domain.Candidate, domain.Job) ([]domain.Judgment, error)
 }
 type Evaluator interface {
-	Evaluate(context.Context, domain.Document, string, string) (domain.Candidate, domain.Job, []domain.Judgment, string, []string, error)
+	Evaluate(context.Context, domain.Document, string, string) (report.Evaluation, error)
 }
 type Service struct {
 	Parser     Parser
@@ -126,19 +126,15 @@ func (s Service) Score(ctx context.Context, path, jd, lang string) (report.Resul
 	var c domain.Candidate
 	var job domain.Job
 	var judgments []domain.Judgment
-	var comment string
-	var questions []string
 	if s.Evaluator != nil {
-		c, job, judgments, comment, questions, e = s.Evaluator.Evaluate(ctx, d, jd, lang)
-		if e != nil {
-			return report.Result{}, e
+		v, err := s.Evaluator.Evaluate(ctx, d, jd, lang)
+		if err != nil {
+			return report.Result{}, err
 		}
-		if c, e = c.Ground(d); e != nil {
-			return report.Result{}, e
+		if err = v.Validate(); err != nil {
+			return report.Result{}, err
 		}
-		if e = job.Validate(jd); e != nil {
-			return report.Result{}, e
-		}
+		return v.Result(lang, s.Mock), nil
 	} else {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
@@ -182,13 +178,5 @@ func (s Service) Score(ctx context.Context, path, jd, lang string) (report.Resul
 	if e != nil {
 		return report.Result{}, e
 	}
-	r := report.Render(a, lang, s.Mock)
-	if s.Evaluator != nil {
-		if comment == "" || len(questions) < 1 {
-			return report.Result{}, errors.New("invalid assessment report")
-		}
-		r.Comment = comment
-		r.Questions = questions
-	}
-	return r, e
+	return report.Render(a, lang, s.Mock), nil
 }

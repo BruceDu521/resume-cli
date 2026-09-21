@@ -8,7 +8,7 @@
 
 评分内部保留来源可追溯，b1/b2是代码给Poppler输出非空行添加的序号，不是PDF段落，模型原先收到全部行而非某64行。64条事实是先前未经充分验证的工程取值，现已从prompt和领域验证中移除；保留总字节及Jev请求预算。Jev内部candidate:v8/job:v6缓存；当前64KiB JD上限与64条事实是不同概念。
 
-score single只生成matches（每项带引用数组）/comment/interview_questions，代码生成内部ID，不提取个人字段。必要时最多纠正一次。Jev路线独立Candidate/Job并行后Match，保留取消及等待worker退出；报告本地模板，无额外AI报告调用。EndBlockID跨行原文范围保留，不限制行数；不再限制24项JD要求。默认single支持一项要求多处不连续引用，可选Jev保留旧单证据选择。
+score single 最新合同：完整 d.Text + JD → report.Evaluation（四项整数分数、comment、interview_questions），policy=model-assessment-v1。不再生成 matches/引用/行号，不经 Candidate/Job/Aggregate。分数由模型判断，代码只校验结构/范围/非空，不能声称要求覆盖已验证。Jev 仍走原 Candidate/Job/Matcher/领域算分，policy=evidence-v1。单模型失败最多一次纠正，纠正请求失败也必须保留初次校验原因。
 
 ## 测试与配置
 
@@ -30,3 +30,7 @@ RESUME_AI_API_KEY为所选生成供应商key，主.env当前DS且RESUME_AI_PIPEL
 ## 本轮 review 收尾
 
 详见 [修复及限制](review-fixes-2026-09-21.md)。全包离线 race 单测和 vet 通过；仅执行一次 Gemini 真实评分，无纠正重试，模型调用6.912秒、CLI6.958秒、评测脚本墙钟9.235秒。5项要求均保留，实际输出多处引用；评论仍无依据写了“全日制”，不把流程成功视为语义准确。结果位于.local/real-resume/review-single-v1/，无后台进程，不追加批量评测。
+
+## 本轮快速简化
+
+依据真实JD暴露的失败，移除默认评分的引用和中间结构合同，直接使用原题六字段结果；无新增真实API调用。旧真实结果均对应旧合同，不能当作新版本实测。全包离线回归覆盖字段缺失/null/非整数/越界/空评语/空问题、完整输入不截断、纠正失败保留原始原因及Jev兼容。尚未验证新的模型输出质量及一次成功率。

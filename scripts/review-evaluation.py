@@ -22,6 +22,11 @@ rubrics={
 'heldout-en-positive':[(r'Rust','skill',True,{'satisfied'}),(r'Kubernetes','skill',True,{'satisfied'}),(r'backups','experience',True,{'satisfied'})],
 'heldout-en-missing':[(r'Kafka','skill',True,{'unknown'}),(r'Python','skill',False,{'satisfied'}),(r'Bachelor','education',True,{'satisfied'})],
 }
+# The historical rubric requires evidence findings. Direct-score reports need
+# human review; never count absent evidence fields as an automatic quality pass.
+for path in root.glob('*/result.json'):
+ if json.loads(path.read_text()).get('policy_version') == 'model-assessment-v1':
+  raise SystemExit('Direct-score reports require human review; this legacy evidence rubric does not apply.')
 rows=[]
 for trial in sorted(root.glob('*/review.json')):
  name=trial.parent.name;case,route,repeat=name.rsplit('-',2)

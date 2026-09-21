@@ -48,11 +48,15 @@ func (s Structurer) decode(ctx context.Context, q Request, out any) error {
 
 func (s Structurer) decodeChecked(ctx context.Context, q Request, out any, validate func() error) error {
 	originalStage := q.Stage
+	var validationReason string
 	for attempt := 0; attempt < 2; attempt++ {
 		b, u, err := s.Generator.Generate(ctx, q)
 		if err != nil {
 			if s.Observe != nil {
 				s.Observe(u)
+			}
+			if validationReason != "" {
+				return fmt.Errorf("%s: initial output failed validation (%s); corrective request failed: %w", originalStage, validationReason, err)
 			}
 			return fmt.Errorf("%s: %w", originalStage, err)
 		}
@@ -76,9 +80,10 @@ func (s Structurer) decodeChecked(ctx context.Context, q Request, out any, valid
 		// A single bounded regeneration from the original source. Do not send the
 		// malformed response or raw decoder errors back as instructions. The reason
 		// is either a fixed JSON message or an internally generated domain error.
+		validationReason = reason
 		q.Stage = originalStage + "_validation_retry"
 		q.Instruction += "\nValidation issue: " + reason + ".\nThe previous response failed strict JSON or source-grounding validation. Return one complete DATA INSTANCE matching the supplied schema, without schema metadata, extra fields, nulls or prose. Use the original input only, with no invented facts."
-		if originalStage == "candidate" || originalStage == "assessment" {
+		if originalStage == "candidate" {
 			q.Instruction += " Quotes must match the declared start/end block range, including wrapped lines."
 		}
 	}

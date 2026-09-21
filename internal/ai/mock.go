@@ -76,25 +76,25 @@ func (Mock) Match(ctx context.Context, c domain.Candidate, j domain.Job) ([]doma
 	return out, nil
 }
 
-func (m Mock) Evaluate(ctx context.Context, d domain.Document, jd, lang string) (domain.Candidate, domain.Job, []domain.Judgment, string, []string, error) {
+func (m Mock) Evaluate(ctx context.Context, d domain.Document, jd, lang string) (report.Evaluation, error) {
 	c, e := m.Candidate(ctx, d)
 	if e != nil {
-		return c, domain.Job{}, nil, "", nil, e
+		return report.Evaluation{}, e
 	}
 	j, e := m.Job(ctx, jd)
 	if e != nil {
-		return c, j, nil, "", nil, e
+		return report.Evaluation{}, e
 	}
 	v, e := m.Match(ctx, c, j)
 	if e != nil {
-		return c, j, v, "", nil, e
+		return report.Evaluation{}, e
 	}
 	a, e := domain.Aggregate(c, j, v)
 	if e != nil {
-		return c, j, v, "", nil, e
+		return report.Evaluation{}, e
 	}
 	r := report.Render(a, lang, true)
-	return c, j, v, r.Comment, r.Questions, nil
+	return report.Evaluation{Overall: r.Overall, Skill: r.Skill, Experience: r.Experience, Education: r.Education, Comment: r.Comment, Questions: r.Questions}, nil
 }
 
 func (m Mock) Extract(ctx context.Context, d domain.Document) (domain.Resume, error) {

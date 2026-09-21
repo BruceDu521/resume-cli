@@ -9,21 +9,18 @@ import (
 	"testing"
 
 	"resume-cli/internal/domain"
+	"resume-cli/internal/report"
 )
 
 func TestAssessmentContract(t *testing.T) {
 	d := domain.NewDocument("Alice\nGo")
-	v := evaluation{Matches: []match{{Requirement: "Go", Category: "skill", Required: true, Status: "partial", Evidence: []citation{{BlockID: "b2", Quote: "Go"}}}}, Comment: "Partial evidence", Questions: []string{"Describe the work?"}}
+	v := report.Evaluation{Overall: 50, Skill: 50, Experience: 50, Education: 50, Comment: "Partial evidence", Questions: []string{"Describe the work?"}}
 	good, _ := json.Marshal(v)
-	bad := strings.Replace(string(good), `"quote":"Go"`, `"quote":"Rust"`, 1)
+	bad := strings.Replace(string(good), `"skill_score":50`, `"skill_score":101`, 1)
 	g := &sequenceGenerator{bodies: []string{bad, string(good)}}
-	c, j, a, comment, q, e := (Structurer{Generator: g}).Evaluate(context.Background(), d, "Go", "en")
-	if e != nil || len(a) != 1 || a[0].Score != 50 || comment == "" || len(q) != 1 || g.calls != 2 {
-		t.Fatal(a, e)
-	}
-	result, e := domain.Aggregate(c, j, a)
-	if e != nil || result.Overall != 50 {
-		t.Fatal(result, e)
+	result, e := (Structurer{Generator: g}).Evaluate(context.Background(), d, "Go", "en")
+	if e != nil || result.Overall != 50 || result.Skill != 50 || g.calls != 2 {
+		t.Fatal(result, g.calls, e)
 	}
 	if g.requests[1].Stage != "assessment_validation_retry" {
 		t.Fatal("missing bounded correction")
@@ -105,18 +102,17 @@ func TestMissingTokenCountsAreUnknown(t *testing.T) {
 	}
 }
 
-func TestAssessmentWrappedCitation(t *testing.T) {
+func TestCandidateWrappedCitation(t *testing.T) {
 	d := domain.NewDocument("Alice\nNo Rust\nproduction experience.")
-	v := evaluation{Matches: []match{{Requirement: "Rust production experience", Category: "experience", Required: true, Status: "unmet", Evidence: []citation{{BlockID: "b2", EndBlockID: "b3", Quote: "No Rust production experience."}}}}, Comment: "Explicit denial", Questions: []string{"What other work?"}}
-	st := Structurer{Generator: fakeGenerator{value: v}}
-	got, _, _, _, _, err := st.Evaluate(context.Background(), d, "Rust production experience", "en")
+	c := domain.Candidate{Resume: domain.Resume{Education: []domain.Education{}, Skills: []string{}}, Facts: []domain.Fact{{ID: "f1", Category: "experience", BlockID: "b2", EndBlockID: "b3", Quote: "No Rust production experience."}}}
+	st := Structurer{Generator: fakeGenerator{value: c}}
+	got, err := st.Candidate(context.Background(), d)
 	if err != nil || got.Facts[0].EndBlockID != "b3" {
 		t.Fatal(got, err)
 	}
-	v.Matches[0].Evidence[0].EndBlockID = ""
-	st.Generator = fakeGenerator{value: v}
-	_, _, _, _, _, err = st.Evaluate(context.Background(), d, "Rust production experience", "en")
-	if err == nil || !strings.Contains(err.Error(), "declared source range") {
-		t.Fatal(err)
+	c.Facts[0].EndBlockID = ""
+	st.Generator = fakeGenerator{value: c}
+	if _, err = st.Candidate(context.Background(), d); err == nil {
+		t.Fatal("bad citation accepted")
 	}
 }

@@ -107,8 +107,8 @@ type Assessment struct {
 	Skill       int       `json:"skill_score"`
 	Experience  int       `json:"experience_score"`
 	Education   int       `json:"education_score"`
-	NotRequired []string  `json:"not_required"`
-	Findings    []Finding `json:"findings"`
+	NotRequired []string  `json:"not_required,omitempty"`
+	Findings    []Finding `json:"findings,omitempty"`
 	Policy      string    `json:"policy_version"`
 }
 
